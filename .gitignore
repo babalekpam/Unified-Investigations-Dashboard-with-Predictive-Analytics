@@ -1,0 +1,41 @@
+# Build output
+target/
+dist/
+build/
+*.class
+*.jar
+
+# Node
+node_modules/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.coverage
+
+# Models and experiment tracking (artifacts, not source)
+models/
+mlruns/
+*.pkl
+
+# Terraform state — never in the repository
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+
+# Local environment
+.env
+.env.local
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+
+# TypeScript incremental build cache
+*.tsbuildinfo

@@ -1,0 +1,144 @@
+# Investigations API on AKS.
+#
+# Identity comes from Entra Workload ID: the pod exchanges its projected service-account
+# token for an Entra token, so no database or API secret is ever mounted as a file or
+# baked into the image.
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gsih-api
+  namespace: gsih
+  annotations:
+    azure.workload.identity/client-id: ${GSIH_API_CLIENT_ID}
+  labels:
+    azure.workload.identity/use: "true"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gsih-investigations-api
+  namespace: gsih
+  labels:
+    app.kubernetes.io/name: gsih-investigations-api
+    app.kubernetes.io/part-of: global-security-intelligence-hub
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gsih-investigations-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gsih-investigations-api
+        azure.workload.identity/use: "true"
+    spec:
+      serviceAccountName: gsih-api
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: ${GSIH_REGISTRY}/gsih-investigations-api:${GSIH_VERSION}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: azure
+            - name: GSIH_DB_URL
+              valueFrom:
+                configMapKeyRef: { name: gsih-config, key: db-url }
+            - name: GSIH_DB_USER
+              valueFrom:
+                configMapKeyRef: { name: gsih-config, key: db-user }
+            - name: GSIH_DB_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: gsih-db, key: password }
+            - name: GSIH_ENTRA_ISSUER_URI
+              valueFrom:
+                configMapKeyRef: { name: gsih-config, key: entra-issuer-uri }
+            - name: GSIH_ENTRA_AUDIENCE
+              valueFrom:
+                configMapKeyRef: { name: gsih-config, key: entra-audience }
+            - name: GSIH_ALLOWED_ORIGINS
+              valueFrom:
+                configMapKeyRef: { name: gsih-config, key: allowed-origins }
+          resources:
+            requests: { cpu: 250m, memory: 768Mi }
+            limits: { cpu: "1", memory: 1536Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          # Flyway migrations run at boot, so readiness can lag well behind liveness on a
+          # cold start. A generous startup probe stops Kubernetes from killing a pod that
+          # is mid-migration and looping forever.
+          startupProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            failureThreshold: 30
+            periodSeconds: 5
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            periodSeconds: 20
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gsih-investigations-api
+  namespace: gsih
+spec:
+  selector:
+    app.kubernetes.io/name: gsih-investigations-api
+  ports:
+    - port: 80
+      targetPort: http
+      name: http
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: gsih-investigations-api
+  namespace: gsih
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gsih-investigations-api
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: gsih-investigations-api
+  namespace: gsih
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: gsih-investigations-api
+  minReplicas: 3
+  maxReplicas: 12
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

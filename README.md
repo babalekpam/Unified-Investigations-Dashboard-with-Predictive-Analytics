@@ -1,1 +1,160 @@
-# Unified-Investigations-Dashboard-with-Predictive-Analytics
+# Global Security Intelligence Hub
+
+A working implementation of the *Unified Investigations Dashboard with Predictive
+Analytics* proposal — consolidated investigations data, three role-based dashboards, and
+a vandalism risk model — built on the stack AT&T uses: **Azure**, **Databricks / Delta
+Lake**, **Kafka**, **Java 21 + Spring Boot on Kubernetes**, **PySpark + Airflow**,
+**Python / scikit-learn / MLflow**, and **React + TypeScript**.
+
+The proposal's own Section 9 suggested a generic toolset (Snowflake or Synapse, Talend or
+Fivetran, Power BI or Tableau). This repository implements the same architecture on the
+AT&T stack instead; [`docs/STACK.md`](docs/STACK.md) maps every suggested component to
+what was actually built and explains each substitution.
+
+---
+
+## What is here
+
+| Section of the proposal | Implementation |
+|---|---|
+| 3.2 Architecture flow | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — bronze → silver → gold, then serving |
+| 4.1 Source systems | `Enums.SourceSystem` — Case IQ, Resolver, Kaseware, D3, Genetec, LenelS2, ServiceNow, Ontic, ArcGIS, SAP … |
+| 5.1 Integration methods | Kafka streaming (`gsih-ingest-service`), Auto Loader batch files and Delta ETL (`pipelines/spark`) |
+| 5.2 Extract → Standardize → Load | `CanonicalMapper` + `Normalizer` (streaming) and `silver_standardize.py` (batch) |
+| 5.3 Governance | RBAC on Entra ID, region-scoped queries, hashed badge identifiers, append-only audit log |
+| 6 Predictive analytics | `analytics/` — logistic regression + gradient boosting, seasonal forecaster, DBSCAN hotspots |
+| 7 Three dashboard views | `web/` — Investigator, Manager and Executive views |
+| 8 Roadmap | Phase 1–2 deliverables; see *Scope* below |
+
+## Repository layout
+
+```
+services/          Java 21 / Spring Boot
+  gsih-common/         canonical model + vendor vocabulary mapping
+  gsih-investigations-api/  serving API behind the three dashboards
+  gsih-ingest-service/      Kafka → warehouse normalisation
+analytics/         Python — feature engineering, models, training, scoring, MLflow
+pipelines/
+  spark/               PySpark medallion jobs for Databricks
+  airflow/dags/        daily refresh + weekly retraining
+  tests/               streaming-vs-batch mapping parity guard
+web/               React + TypeScript dashboards
+infra/
+  docker/              images for every service
+  k8s/                 AKS manifests with workload identity
+  terraform/           Azure footprint
+data/seed/         deterministic demo data generator
+```
+
+## Running it
+
+### Everything at once
+
+```bash
+docker compose up --build
+```
+
+Then seed the warehouse and run the predictive layer once:
+
+```bash
+pip install -e "analytics[dev]"
+python data/seed/generate_seed.py --db-url postgresql+psycopg2://gsih:gsih@localhost:5432/gsih
+
+TOKEN=$(curl -s "http://localhost:8080/api/v1/auth/local-token?username=analytics-svc&roles=ANALYTICS_WRITER" \
+  | python -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
+
+GSIH_DB_URL=postgresql+psycopg2://gsih:gsih@localhost:5432/gsih \
+  python -m gsih_analytics.train --output-dir ./models
+
+GSIH_DB_URL=postgresql+psycopg2://gsih:gsih@localhost:5432/gsih \
+GSIH_API_TOKEN=$TOKEN \
+  python -m gsih_analytics.scoring --model-dir ./models
+```
+
+Open <http://localhost:8090> and pick one of the three demo personas. API docs are at
+<http://localhost:8080/swagger-ui.html>.
+
+### Piece by piece
+
+```bash
+mvn -f services/pom.xml verify          # Java build and tests
+pytest analytics/tests pipelines/tests  # model and mapping tests
+cd web && npm ci && npm test && npm run build
+```
+
+## How sign-in works
+
+The API is an OAuth2 resource server. In a deployed environment tokens come from
+**Microsoft Entra ID** and the `roles` claim carries the app roles assigned to each
+security group; the `region` claim scopes a user to their own region. Locally the `local`
+Spring profile swaps the Entra ID decoder for a symmetric key and exposes
+`/api/v1/auth/local-token`, so the stack can be demonstrated without a tenant. **The
+authorisation rules are identical in both profiles** — only token verification differs.
+
+Enforced and covered by tests:
+
+- an investigator can open only their own queue;
+- a manager is confined to their own region even when they ask for another;
+- only an executive sees the enterprise view;
+- only the analytics workload identity can write risk scores;
+- every read is written to an append-only audit table.
+
+## The predictive layer
+
+`analytics/` predicts, for each site, the probability of a vandalism incident **in the
+next seven days**, from the six input families listed in Section 6.2 of the proposal.
+
+Three decisions are worth knowing about before reading the code:
+
+**Features never see the future.** Every feature for a `(site, date)` row is computed from
+data strictly before that date, and the evaluation split is chronological, never random.
+A test (`test_features_never_see_the_future`) asserts that adding an incident *after* the
+scoring date changes no feature value.
+
+**Risk bands are relative, not absolute.** Vandalism on a given site-week is rare — a base
+rate of a few percent — so a well-calibrated model almost never emits a probability above
+0.66. Fixed thresholds would paint every site LOW. A site is banded HIGH if it is in the
+worst 10% of *today's* scoring run, which is the question a security team actually asks:
+given that we can patrol a few sites tonight, which ones? The raw probability is always
+shown next to the band.
+
+**The forecast models the annual cycle.** Vandalism rises through the dark months. A
+trend-only forecaster reads the summer trough as a permanent decline and projects towards
+zero; this one fits two Fourier harmonics of day-of-year alongside a damped trend, and a
+test pins that behaviour.
+
+Predictions are probabilities, not certainties. The executive dashboard says so on the
+chart itself.
+
+## Verification
+
+Everything below was run against a live PostgreSQL warehouse seeded with two years of
+generated history (69 sites, 1,121 incidents, 534 cases, 275k badge reads):
+
+- **39 Java tests** — canonical mapping, normalisation, RBAC, dashboard KPIs, risk ingest
+- **25 Python tests** — leakage guard, model quality, forecaster behaviour, clustering
+- **3 parity tests** — streaming and batch vocabularies agree
+- **13 dashboard tests** — the three views, RBAC gating, chart accessibility
+- **end-to-end**: seed → train → score → 69 scores and a 90-day projection posted through
+  the API → all three dashboards rendered, and every RBAC denial returned 403/401
+
+On this synthetic data the promoted model reaches ROC-AUC 0.60 and average precision
+0.103 against a 7.6% base rate — a real but modest lift, which is what one should expect
+from generated data. The number to judge is the one from Phase 3 of the roadmap, on the
+organisation's own history; the training job refuses to promote a model that does not
+clear its guardrail, so a bad retrain leaves the previous model in service.
+
+## Scope
+
+Built and running: the canonical model, both ingestion paths, the serving API, the
+predictive layer, the three dashboards, and the infrastructure definitions.
+
+Written as production-path code but not executed here, because they need the platforms
+themselves: the PySpark medallion jobs (Databricks), the Airflow DAGs (an Airflow
+deployment), and the Terraform footprint (an Azure subscription). The mapping-parity test
+covers the one correctness risk that spans the boundary between the Spark path and the
+Java path.
+
+Deliberately not built: connectors to any specific vendor system. Section 8's Phase 1
+exists precisely to confirm which systems are in use before that code is written — the
+`RawEvents` envelopes define the contract each connector will publish to.

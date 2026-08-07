@@ -1,0 +1,76 @@
+# Streaming ingest consumers.
+#
+# Replica count is tied to Kafka partitioning: each pod runs three consumer threads, so
+# three pods saturate a nine-partition topic. Adding pods beyond partitions/threads buys
+# nothing — the extra consumers sit idle in the group.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gsih-ingest-service
+  namespace: gsih
+  labels:
+    app.kubernetes.io/name: gsih-ingest-service
+    app.kubernetes.io/part-of: global-security-intelligence-hub
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gsih-ingest-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gsih-ingest-service
+        azure.workload.identity/use: "true"
+    spec:
+      serviceAccountName: gsih-ingest
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      # Rebalancing a consumer group takes time; let a pod finish its in-flight batch and
+      # commit rather than being killed mid-write and forcing a replay.
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: ingest
+          image: ${GSIH_REGISTRY}/gsih-ingest-service:${GSIH_VERSION}
+          ports:
+            - name: http
+              containerPort: 8081
+          env:
+            - name: GSIH_DB_URL
+              valueFrom:
+                configMapKeyRef: { name: gsih-config, key: db-url }
+            - name: GSIH_DB_USER
+              valueFrom:
+                configMapKeyRef: { name: gsih-config, key: db-user }
+            - name: GSIH_DB_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: gsih-db, key: password }
+            - name: GSIH_KAFKA_BOOTSTRAP
+              valueFrom:
+                configMapKeyRef: { name: gsih-config, key: kafka-bootstrap }
+            - name: GSIH_BADGE_SALT
+              valueFrom:
+                secretKeyRef: { name: gsih-ingest, key: badge-salt }
+          resources:
+            requests: { cpu: 250m, memory: 640Mi }
+            limits: { cpu: "1", memory: 1280Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            periodSeconds: 20
+      volumes:
+        - name: tmp
+          emptyDir: {}
