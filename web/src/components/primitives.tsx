@@ -6,14 +6,20 @@ export function Card({
   note,
   children,
   span,
+  lead,
 }: {
   title?: string
   note?: string
   children: ReactNode
   span?: number
+  /** Marks the card a view opens on; it carries a rule in the identity hue. One per view. */
+  lead?: boolean
 }) {
   return (
-    <section className="card" style={span ? { gridColumn: `span ${span}` } : undefined}>
+    <section
+      className={`card${lead ? ' lead' : ''}`}
+      style={span ? { gridColumn: `span ${span}` } : undefined}
+    >
       {title ? <h2>{title}</h2> : null}
       {note ? <p className="card-note">{note}</p> : null}
       {children}
@@ -27,11 +33,14 @@ export function Stat({
   value,
   caption,
   delta,
+  hero,
 }: {
   label: string
   value: string | number
   caption?: string
   delta?: { value: number; goodWhenNegative?: boolean }
+  /** The one figure in a view that would make someone act. At most one per view. */
+  hero?: boolean
 }) {
   const deltaClass =
     delta === undefined
@@ -41,7 +50,7 @@ export function Stat({
         : 'delta-down'
 
   return (
-    <div className="card">
+    <div className={`card${hero ? ' hero' : ''}`}>
       <p className="stat-label">{label}</p>
       <p className="stat-value">{value}</p>
       {delta ? (

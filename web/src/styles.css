@@ -1,3 +1,34 @@
+/* Two voices. Bricolage Grotesque for headings and hero figures — an engineered grotesque
+   with faintly idiosyncratic forms, so a large number has presence rather than bulk. Geist
+   Mono for everything the system names: case numbers, site codes, scores, windows. Not a
+   stylistic tic — figures align down a column without being asked, and an identifier reads
+   as a key rather than as prose. Both are SIL Open Font Licence; the licences ship
+   alongside the files in src/assets/fonts. */
+@font-face {
+  font-family: 'GSIH Display';
+  src: url('./assets/fonts/BricolageGrotesque-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'GSIH Display';
+  src: url('./assets/fonts/BricolageGrotesque-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'GSIH Mono';
+  src: url('./assets/fonts/GeistMono-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'GSIH Mono';
+  src: url('./assets/fonts/GeistMono-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-display: swap;
+}
+
 /* Design tokens — aligned to the AT&T brand palette.
 
    The brand blue #00A8E0 is an *identity fill*, not a data mark. On white it measures
@@ -34,6 +65,7 @@
   --success-text: #067806;
 
   --brand: #00a8e0;
+  --band: #007ba6;
   --brand-ink: #ffffff;
   --accent: #007ba6;
 
@@ -56,8 +88,11 @@
   --status-serious: #b8502a;
   --status-critical: #c22f2f;
 
-  --radius: 8px;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --display: 'GSIH Display', ui-sans-serif, system-ui, sans-serif;
   --font: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'GSIH Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -113,6 +148,7 @@
 
   /* On the brand black the brand blue reaches 6.4:1, so it needs no substitute here. */
   --brand: #00a8e0;
+  --band: #00658a;
   --brand-ink: #0d0d0d;
   --accent: #00a8e0;
 
@@ -447,4 +483,144 @@ button.action {
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
+}
+
+
+/* ---------------------------------------------------------------- type system
+   Design philosophy in docs/DESIGN-PHILOSOPHY.md. The short version: weight follows
+   consequence, the grid is used asymmetrically, and there are exactly three surface
+   planes — ground, card, inset well. */
+
+.app-header {
+  background: var(--band);
+  color: #ffffff;
+  border-bottom: none;
+  padding: 22px 24px;
+}
+
+.app-title {
+  font-family: var(--display);
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: #ffffff;
+}
+
+.app-header .app-subtitle {
+  color: rgba(255, 255, 255, 0.85);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app-header button.action {
+  background: transparent;
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.app-header button.action:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.tab b,
+.tab {
+  font-family: var(--display);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  font-size: 0.95rem;
+}
+
+.card h2 {
+  font-family: var(--display);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.014em;
+}
+
+/* Stat tiles. The hero claims more space and more weight; the rest support it. A grid of
+   identical tiles is an admission that the designer did not know which number mattered. */
+.stat-label {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.stat-value {
+  font-family: var(--display);
+  font-size: 2.5rem;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums;
+  line-height: 0.95;
+  margin-top: 0.7rem;
+}
+
+.card.hero .stat-value {
+  font-size: 4rem;
+  letter-spacing: -0.045em;
+}
+
+.card.hero .stat-label {
+  color: var(--accent);
+}
+
+/* The lead card of a view carries a hairline of the identity hue. One per view. */
+.card.lead {
+  border-top: 3px solid var(--brand);
+}
+
+th {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  font-weight: 400;
+}
+
+td.id,
+td.numeric,
+th.numeric {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+tbody tr:hover td {
+  background: var(--page-plane);
+}
+
+.badge {
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.05em;
+  border-radius: 3px;
+}
+
+.legend {
+  font-size: 0.72rem;
+}
+
+.legend .val {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+svg text {
+  font-family: var(--mono);
+}
+
+.tooltip strong {
+  font-family: var(--display);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.persona-role {
+  font-family: var(--display);
+  font-weight: 700;
+  letter-spacing: -0.015em;
 }

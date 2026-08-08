@@ -25,7 +25,7 @@ export function InvestigatorDashboard({
   return (
     <>
       <div className="grid">
-        <Stat label="Open cases" value={data.openCases} caption={data.investigator} />
+        <Stat label="Open cases" value={data.openCases} caption={data.investigator} hero />
         <Stat
           label="Overdue tasks"
           value={data.overdueTasks}
@@ -39,6 +39,7 @@ export function InvestigatorDashboard({
       </div>
 
       <Card
+        lead
         title="Your case queue"
         note="Highest priority first, then earliest deadline."
       >

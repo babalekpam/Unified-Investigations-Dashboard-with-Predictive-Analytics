@@ -22,6 +22,7 @@ export function ExecutiveDashboard({ data }: { data: ExecutiveData }) {
           label="Investigations (12 months)"
           value={data.totalInvestigations.toLocaleString()}
           delta={{ value: data.yoyChangePct, goodWhenNegative: true }}
+          hero
         />
         <Stat
           label="Average resolution"
@@ -45,6 +46,7 @@ export function ExecutiveDashboard({ data }: { data: ExecutiveData }) {
       </div>
 
       <Card
+        lead
         title="Projected vandalism incidents"
         note="Daily projection with an 80% prediction interval. Predictions are probabilities, not certainties — they guide where to look, not what will happen."
       >

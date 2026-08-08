@@ -8,7 +8,7 @@ export function ManagerDashboard({ data }: { data: ManagerData }) {
   return (
     <>
       <div className="grid">
-        <Stat label="Open cases" value={data.openCases} caption={data.region ?? 'All regions'} />
+        <Stat label="Open cases" value={data.openCases} caption={data.region ?? 'All regions'} hero />
         <Stat
           label="Closure rate"
           value={`${data.closureRatePct.toFixed(1)}%`}
@@ -37,6 +37,7 @@ export function ManagerDashboard({ data }: { data: ManagerData }) {
       </div>
 
       <Card
+        lead
         title="Vandalism risk across your region"
         note="Position reflects each site's actual coordinates; colour and size both encode the risk score."
       >
