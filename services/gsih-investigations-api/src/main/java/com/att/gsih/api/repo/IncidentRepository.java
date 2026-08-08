@@ -60,4 +60,11 @@ public interface IncidentRepository extends JpaRepository<Incident, UUID> {
   @Query("select i.occurredAt from Incident i where i.occurredAt >= :since and (:region is null or i.region = :region)")
   List<Instant> occurrenceTimestamps(
       @Param("since") Instant since, @Param("region") String region);
+
+  /** Every incident at a site inside the window, most recent first — link-graph expansion. */
+  List<Incident> findBySiteCodeAndOccurredAtAfterOrderByOccurredAtDesc(
+      String siteCode, Instant after);
+
+  /** Cases that already exist for a set of incidents, so the graph can link the two. */
+  List<Incident> findByCaseNumberIn(java.util.Collection<String> caseNumbers);
 }

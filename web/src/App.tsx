@@ -110,14 +110,17 @@ export default function App() {
       <main>
         {loading ? <Loading what="dashboard" /> : null}
         {error ? <ErrorNotice message={error} /> : null}
-        {!loading && !error && data ? <ActiveView tab={tab} data={data} /> : null}
+        {!loading && !error && data ? (
+          <ActiveView tab={tab} data={data} token={session.token} />
+        ) : null}
       </main>
     </>
   )
 }
 
-function ActiveView({ tab, data }: { tab: UserRole; data: ViewData }) {
-  if (tab === 'INVESTIGATOR') return <InvestigatorDashboard data={data as InvestigatorView} />
+function ActiveView({ tab, data, token }: { tab: UserRole; data: ViewData; token: string }) {
+  if (tab === 'INVESTIGATOR')
+    return <InvestigatorDashboard data={data as InvestigatorView} token={token} />
   if (tab === 'MANAGER') return <ManagerDashboard data={data as ManagerView} />
   return <ExecutiveDashboard data={data as ExecutiveView} />
 }

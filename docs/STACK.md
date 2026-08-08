@@ -56,9 +56,15 @@ camera feeds, that trade changes; the training job is a container either way.
 
 ## Palette
 
-The dashboards and the charts are coloured from the AT&T brand palette: the brand
-interaction blue `#0568AE` leads, with one-hue ramps derived from it, and the brand black
-`#191919` and light grey `#F2F2F2` as the neutrals. Status colours (good / warning /
+The dashboards and the charts are coloured from the AT&T brand palette: the brand blue
+`#00A8E0` (PMS 298 C), with one-hue ramps derived from it, and the brand black `#191919`
+and light grey `#F2F2F2` as the neutrals.
+
+The brand blue is an **identity fill, not a data mark**. On white it measures 2.74:1,
+below the 3:1 a mark needs — which is exactly how AT&T use it themselves: a filled bar
+with type on top, never thin marks on a white ground. So it drives the chrome, and data
+marks take a hue-locked darker step (`#0089B8`) that clears the floor. On the brand black
+it reaches 6.4:1 and needs no substitute. Status colours (good / warning /
 critical) stay reserved and outside the brand hues, so a state can never be mistaken for a
 data series; each one ships with an icon and a word as well as a colour.
 
@@ -71,6 +77,11 @@ Every value was checked with a palette validator against the exact surfaces it r
 in both light and dark: the categorical pair passes the lightness band, chroma floor,
 colour-vision separation and contrast checks; the ordinal ramp passes monotonicity, step
 spacing and light-end contrast; and small text clears WCAG AA on both grounds.
+
+No AT&T data-visualisation standard is published; searching the design-system directories
+that index IBM Carbon, Red Hat PatternFly, Ant Design and USWDS turns up nothing for AT&T.
+The chart forms here are therefore chosen from the shape of each dataset, not from a house
+style, and confirming the visual language against Brand Central belongs in Phase 1.
 
 These hex values are taken from AT&T's publicly visible brand usage rather than from an
 internal brand book. Confirm them against AT&T Brand Central before the deck goes in front

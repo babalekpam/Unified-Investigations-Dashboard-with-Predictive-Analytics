@@ -41,6 +41,16 @@ REGIONS = {
              ("Denver", 39.7392, -104.9903)],
 }
 
+# Distinct two-letter codes. Slicing the region name does not work: SOUTHWEST and
+# SOUTHEAST both begin "SO", which collides the case-number series of two regions.
+REGION_CODES = {
+    "SOUTHWEST": "SW",
+    "SOUTHEAST": "SE",
+    "NORTHEAST": "NE",
+    "MIDWEST": "MW",
+    "WEST": "WE",
+}
+
 TIMEZONES = {
     "SOUTHWEST": "America/Chicago",
     "SOUTHEAST": "America/New_York",
@@ -74,6 +84,21 @@ STATUSES = ["NEW", "IN_PROGRESS", "PENDING_REVIEW", "ESCALATED", "CLOSED"]
 PRIORITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 
 BADGE_SALT = "local-demo-badge-salt"
+
+# Badge holders per site, and per region. Real facilities have a recurring population —
+# the same staff badge in night after night, and a smaller pool of regional technicians
+# and contractors moves between sites. Drawing a fresh random badge per read (the obvious
+# shortcut) produces data where no badge ever appears twice, which makes both the
+# after-hours features and link analysis look like they find nothing.
+HOME_BADGES_PER_SITE = 12
+ROAMING_BADGES_PER_REGION = 6
+
+# The band that matters. Between the badge that only ever opens one door and the regional
+# technician who opens every door, there is a contractor or relief crew covering two or
+# three neighbouring sites. That middle is where a genuine cross-site link shows up, and a
+# generator with only the two extremes makes link analysis look like it finds nothing.
+SITES_PER_CLUSTER = 3
+CLUSTER_BADGES = 2
 
 
 @dataclass
@@ -143,9 +168,54 @@ def seasonal_multiplier(day: datetime) -> float:
     return 1.0 + 0.35 * float(np.cos(phase))
 
 
+def build_badge_pools(rng: np.random.Generator, sites: list[Site]):
+    """Three populations: site staff, small-cluster crews, and regional roamers."""
+    roaming: dict[str, list[str]] = {}
+    for region in sorted({site.region for site in sites}):
+        roaming[region] = [
+            f"BADGE-R{REGION_CODES[region]}-{int(rng.integers(10000, 99999))}"
+            for _ in range(ROAMING_BADGES_PER_REGION)
+        ]
+
+    home: dict[str, list[str]] = {}
+    for site in sites:
+        home[site.site_code] = [
+            f"BADGE-{site.site_code[-4:]}-{int(rng.integers(10000, 99999))}"
+            for _ in range(HOME_BADGES_PER_SITE)
+        ]
+
+    # Cluster crews: neighbouring sites in the same region share a couple of badges.
+    cluster: dict[str, list[str]] = {site.site_code: [] for site in sites}
+    for region in sorted({site.region for site in sites}):
+        in_region = [s.site_code for s in sites if s.region == region]
+        for start in range(0, len(in_region), SITES_PER_CLUSTER):
+            group = in_region[start : start + SITES_PER_CLUSTER]
+            if len(group) < 2:
+                continue
+            badges = [
+                f"BADGE-C{REGION_CODES[region]}{start}-{int(rng.integers(10000, 99999))}"
+                for _ in range(CLUSTER_BADGES)
+            ]
+            for code in group:
+                cluster[code] = badges
+
+    return home, roaming, cluster
+
+
+def pick_badge(rng, site, home, cluster, roaming) -> str:
+    """Who is on site after hours: mostly staff, sometimes a crew, occasionally a roamer."""
+    draw = rng.random()
+    if draw < 0.20 and cluster[site.site_code]:
+        return str(rng.choice(cluster[site.site_code]))
+    if draw < 0.32:
+        return str(rng.choice(roaming[site.region]))
+    return str(rng.choice(home[site.site_code]))
+
+
 def build_events(rng: np.random.Generator, sites: list[Site], now: datetime):
     incidents, access_events, alarm_events = [], [], []
     start = now - timedelta(days=DAYS_OF_HISTORY)
+    home_badges, roaming_badges, cluster_badges = build_badge_pools(rng, sites)
 
     for day_offset in range(DAYS_OF_HISTORY):
         day = start + timedelta(days=day_offset)
@@ -165,7 +235,7 @@ def build_events(rng: np.random.Generator, sites: list[Site], now: datetime):
                             "id": uuid.uuid4(),
                             "source_system": str(rng.choice(ACCESS_SOURCES)),
                             "site_code": site.site_code,
-                            "badge_hash": badge_hash(f"BADGE-{int(rng.integers(1000, 9999))}"),
+                            "badge_hash": badge_hash(pick_badge(rng, site, home_badges, cluster_badges, roaming_badges)),
                             "door_id": f"DOOR-{int(rng.integers(1, 9))}",
                             "result": str(rng.choice(["GRANTED", "DENIED", "FORCED"], p=[0.6, 0.3, 0.1])),
                             "event_time": day.replace(hour=hour % 24, minute=int(rng.integers(0, 60))),
@@ -181,7 +251,7 @@ def build_events(rng: np.random.Generator, sites: list[Site], now: datetime):
                         "id": uuid.uuid4(),
                         "source_system": str(rng.choice(ACCESS_SOURCES)),
                         "site_code": site.site_code,
-                        "badge_hash": badge_hash(f"BADGE-{int(rng.integers(1000, 9999))}"),
+                        "badge_hash": badge_hash(str(rng.choice(home_badges[site.site_code]))),
                         "door_id": f"DOOR-{int(rng.integers(1, 9))}",
                         "result": "GRANTED" if rng.random() < 0.95 else "DENIED",
                         "event_time": day.replace(hour=int(rng.integers(7, 19)), minute=int(rng.integers(0, 60))),
@@ -244,6 +314,10 @@ def _incident(rng: np.random.Generator, site: Site, day: datetime, incident_type
 
 def build_cases(rng: np.random.Generator, sites: list[Site], incidents: list[dict], now: datetime):
     """Opens a case for a share of incidents, then ages them through the lifecycle."""
+    # Sequential per region, the way real case management systems number them. Random
+    # numbers collide: 500 cases drawn from a 5-digit range hit the birthday problem and
+    # the unique index on case_number rejects the insert.
+    next_case_number: dict[str, int] = {}
     by_region: dict[str, list[str]] = {}
     for email, region in INVESTIGATORS:
         by_region.setdefault(region, []).append(email)
@@ -275,7 +349,9 @@ def build_cases(rng: np.random.Generator, sites: list[Site], incidents: list[dic
             status = str(rng.choice(STATUSES[:4], p=[0.20, 0.52, 0.16, 0.12]))
             closed_at = None
 
-        case_number = f"{site.region[:2]}-{int(rng.integers(10000, 99999))}"
+        sequence = next_case_number.get(site.region, 1000) + 1
+        next_case_number[site.region] = sequence
+        case_number = f"{REGION_CODES[site.region]}-{sequence}"
         incident["case_number"] = case_number
 
         cases.append(

@@ -136,3 +136,42 @@ export interface ExecutiveView {
   vandalismForecast: ForecastPoint[]
   riskPosture: RiskPosture
 }
+
+/* ---------------------------------------------------------------- link analysis */
+
+export type NodeType = 'CASE' | 'SITE' | 'INCIDENT' | 'BADGE' | 'ALARM'
+export type EdgeType = 'AT_SITE' | 'FROM_INCIDENT' | 'ACCESSED' | 'RAISED_AT'
+
+export interface LinkDetail {
+  label: string
+  value: string
+}
+
+export interface LinkNode {
+  id: string
+  type: NodeType
+  label: string
+  sublabel: string
+  /** Distance from the seed case, in edges. The seed is 0. */
+  hops: number
+  weight: number
+  detail: LinkDetail[]
+}
+
+export interface LinkEdge {
+  source: string
+  target: string
+  type: EdgeType
+  label: string
+  weight: number
+}
+
+export interface LinkGraph {
+  seedId: string
+  seedLabel: string
+  nodes: LinkNode[]
+  edges: LinkEdge[]
+  nodeBudget: number
+  /** True when the traversal hit its budget, so the view must not imply completeness. */
+  truncated: boolean
+}

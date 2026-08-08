@@ -1,4 +1,4 @@
-import type { ExecutiveView, InvestigatorView, ManagerView, RiskAlert } from './types'
+import type { ExecutiveView, InvestigatorView, LinkGraph, ManagerView, RiskAlert } from './types'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080'
 
@@ -53,6 +53,11 @@ export const api = {
     request<RiskAlert[]>('/api/v1/risk/heatmap', token, { region: region ?? '' }),
 
   regions: (token: string) => request<string[]>('/api/v1/sites/regions', token),
+
+  linkGraph: (token: string, caseNumber: string, hops = 2) =>
+    request<LinkGraph>(`/api/v1/graph/cases/${encodeURIComponent(caseNumber)}`, token, {
+      hops: String(hops),
+    }),
 
   /**
    * Demo sign-in against the API's `local` profile. In deployed environments the token

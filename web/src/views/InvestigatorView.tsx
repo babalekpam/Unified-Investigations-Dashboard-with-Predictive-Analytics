@@ -1,7 +1,11 @@
-import type { InvestigatorView as InvestigatorData } from '../api/types'
+import { useEffect, useState } from 'react'
+import { api } from '../api/client'
+import type { InvestigatorView as InvestigatorData, LinkGraph } from '../api/types'
+import { LinkGraphView } from '../components/LinkGraphView'
 import {
   Card,
   Empty,
+  Loading,
   OverdueBadge,
   RiskBadge,
   Stat,
@@ -11,7 +15,13 @@ import {
 } from '../components/primitives'
 
 /** Section 7.1 — personal case queue, deadlines, repeat-incident flags and next steps. */
-export function InvestigatorDashboard({ data }: { data: InvestigatorData }) {
+export function InvestigatorDashboard({
+  data,
+  token,
+}: {
+  data: InvestigatorData
+  token?: string
+}) {
   return (
     <>
       <div className="grid">
@@ -71,6 +81,10 @@ export function InvestigatorDashboard({ data }: { data: InvestigatorData }) {
           </div>
         )}
       </Card>
+
+      {token && data.queue.length > 0 ? (
+        <LinkAnalysisPanel token={token} queue={data.queue.map((c) => c.caseNumber)} />
+      ) : null}
 
       <div className="grid">
         <Card
@@ -144,5 +158,76 @@ export function InvestigatorDashboard({ data }: { data: InvestigatorData }) {
         </Card>
       </div>
     </>
+  )
+}
+
+/**
+ * Link analysis for one case in the queue (Section 7.1).
+ *
+ * Defaults to the top of the queue — the case the investigator is most likely working —
+ * and lets them walk the rest. Two hops covers "this case's site and everything on it";
+ * three follows a shared badge to a second site, which is the finding worth surfacing.
+ */
+function LinkAnalysisPanel({ token, queue }: { token: string; queue: string[] }) {
+  const [caseNumber, setCaseNumber] = useState(queue[0])
+  const [hops, setHops] = useState(2)
+  const [graph, setGraph] = useState<LinkGraph | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    api
+      .linkGraph(token, caseNumber, hops)
+      .then((result) => {
+        if (!cancelled) setGraph(result)
+      })
+      .catch((cause) => {
+        if (!cancelled) {
+          setGraph(null)
+          setError(cause instanceof Error ? cause.message : 'Could not build the link graph')
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    // Guards against a slow response for a previously selected case overwriting a newer one.
+    return () => {
+      cancelled = true
+    }
+  }, [token, caseNumber, hops])
+
+  return (
+    <Card
+      title="Link analysis"
+      note="What else touches this case — the same site, the same badge after hours, the same alarm pattern."
+    >
+      <div className="toolbar" style={{ marginBottom: 12 }}>
+        <label>
+          <span className="visually-hidden">Case</span>
+          <select value={caseNumber} onChange={(e) => setCaseNumber(e.target.value)}>
+            {queue.map((number) => (
+              <option key={number} value={number}>
+                {number}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span className="visually-hidden">Search depth</span>
+          <select value={hops} onChange={(e) => setHops(Number(e.target.value))}>
+            <option value={1}>1 step — this case&apos;s site</option>
+            <option value={2}>2 steps — everything at that site</option>
+            <option value={3}>3 steps — follow shared badges</option>
+          </select>
+        </label>
+      </div>
+
+      {loading ? <Loading what="link graph" /> : null}
+      {error ? <Empty message={error} /> : null}
+      {!loading && !error && graph ? <LinkGraphView graph={graph} /> : null}
+    </Card>
   )
 }

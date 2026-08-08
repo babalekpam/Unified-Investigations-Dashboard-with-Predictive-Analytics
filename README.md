@@ -27,6 +27,7 @@ what was actually built and explains each substitution.
 | 5.3 Governance | RBAC on Entra ID, region-scoped queries, hashed badge identifiers, append-only audit log |
 | 6 Predictive analytics | `analytics/` — logistic regression + gradient boosting, seasonal forecaster, DBSCAN hotspots |
 | 7 Three dashboard views | `web/` — Investigator, Manager and Executive views |
+| Link analysis (beyond the proposal) | `LinkGraphService` + `LinkGraphView` — entity graph across cases, sites, incidents, badges and alarms |
 | 8 Roadmap | Phase 1–2 deliverables; see *Scope* below |
 
 ## Repository layout
@@ -134,10 +135,10 @@ chart itself.
 Everything below was run against a live PostgreSQL warehouse seeded with two years of
 generated history (69 sites, 1,121 incidents, 534 cases, 275k badge reads):
 
-- **39 Java tests** — canonical mapping, normalisation, RBAC, dashboard KPIs, risk ingest
+- **49 Java tests** — canonical mapping, normalisation, RBAC, dashboard KPIs, risk ingest, link analysis
 - **25 Python tests** — leakage guard, model quality, forecaster behaviour, clustering
 - **3 parity tests** — streaming and batch vocabularies agree
-- **13 dashboard tests** — the three views, RBAC gating, chart accessibility
+- **19 dashboard tests** — the three views, RBAC gating, chart accessibility, link graph
 - **end-to-end**: seed → train → score → 69 scores and a 90-day projection posted through
   the API → all three dashboards rendered, and every RBAC denial returned 403/401
 
@@ -146,6 +147,24 @@ On this synthetic data the promoted model reaches ROC-AUC 0.60 and average preci
 from generated data. The number to judge is the one from Phase 3 of the roadmap, on the
 organisation's own history; the training job refuses to promote a model that does not
 clear its guardrail, so a bad retrain leaves the previous model in service.
+
+## Link analysis
+
+Beyond the proposal's scope, but the thing an investigations platform reaches for once a
+case stops being about one incident: `GET /api/v1/graph/cases/{caseNumber}` walks the
+entity graph outward from a case — its site, everything that happened there, and the badges
+read after hours — and the investigator view draws it.
+
+Three bounds keep it useful rather than a hairball. Hops (two by default; three follows a
+shared badge to a second site). A node budget, with the response saying when it truncated
+so the UI can claim "the strongest N connections" rather than completeness. And a
+selectivity rule: a badge read after hours at more than four sites is a roaming credential
+— a technician's route — and is drawn but never expanded through, because expanding one
+connects every site to every other. Region confinement applies to every site the traversal
+reaches, not only the seed, so the graph cannot become a way around it.
+
+Graph visualisation has AT&T lineage worth noting in a proposal: Graphviz was created at
+AT&T Bell Labs in 1991 and developed by AT&T Labs Research.
 
 ## Scope
 
