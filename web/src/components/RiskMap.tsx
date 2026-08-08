@@ -7,10 +7,17 @@ const HEIGHT = 360
 const PADDING = 32
 
 // Sequential ramp, light→dark: risk score is a continuous magnitude, so one hue.
-const RAMP = ['var(--seq-100)', 'var(--seq-250)', 'var(--seq-350)', 'var(--seq-450)', 'var(--seq-650)']
+const RAMP = ['var(--seq-1)', 'var(--seq-2)', 'var(--seq-3)', 'var(--seq-4)', 'var(--seq-5)']
 
-function rampColor(score: number): string {
-  const index = Math.min(RAMP.length - 1, Math.floor(score * RAMP.length))
+/**
+ * Steps the ramp over the range actually present in the run, not over 0–1.
+ *
+ * Vandalism is a rare event, so a calibrated model's scores cluster well below 0.5. Spread
+ * against a fixed 0–1 domain every site lands in the palest one or two steps and the map
+ * goes flat — the same reason bands are ranked rather than thresholded.
+ */
+function rampColor(score: number, max: number): string {
+  const index = Math.min(RAMP.length - 1, Math.floor((score / max) * RAMP.length))
   return RAMP[index]
 }
 
@@ -26,12 +33,12 @@ function rampColor(score: number): string {
 export function RiskMap({ sites }: { sites: RiskAlert[] }) {
   const { show, hide, element } = useTooltip()
 
-  const placed = useMemo(() => {
+  const projection = useMemo(() => {
     const located = sites.filter(
       (site) => site.latitude !== null && site.longitude !== null,
     ) as (RiskAlert & { latitude: number; longitude: number })[]
 
-    if (located.length === 0) return []
+    if (located.length === 0) return { marks: [], max: 1 }
 
     const lats = located.map((s) => s.latitude)
     const lons = located.map((s) => s.longitude)
@@ -42,7 +49,9 @@ export function RiskMap({ sites }: { sites: RiskAlert[] }) {
     const minLat = Math.min(...lats)
     const minLon = Math.min(...lons)
 
-    return located
+    const max = Math.max(...located.map((s) => s.riskScore), 0.01)
+
+    const marks = located
       .map((site) => ({
         site,
         x: PADDING + ((site.longitude - minLon) / lonSpan) * (WIDTH - PADDING * 2),
@@ -51,7 +60,11 @@ export function RiskMap({ sites }: { sites: RiskAlert[] }) {
       }))
       // Highest risk drawn last so it is never hidden under a low-risk mark.
       .sort((a, b) => a.site.riskScore - b.site.riskScore)
+
+    return { marks, max }
   }, [sites])
+
+  const { marks: placed, max } = projection
 
   if (placed.length === 0) {
     return <p className="notice">No scored sites with coordinates to plot.</p>
@@ -64,7 +77,7 @@ export function RiskMap({ sites }: { sites: RiskAlert[] }) {
         {RAMP.map((color, index) => (
           <li key={color}>
             <span className="swatch" style={{ background: color }} aria-hidden="true" />
-            {(index / RAMP.length).toFixed(1)}–{((index + 1) / RAMP.length).toFixed(1)}
+            {((index / RAMP.length) * max).toFixed(2)}–{(((index + 1) / RAMP.length) * max).toFixed(2)}
           </li>
         ))}
       </ul>
@@ -83,8 +96,8 @@ export function RiskMap({ sites }: { sites: RiskAlert[] }) {
             cx={x}
             cy={y}
             /* Radius carries magnitude too, so the map does not rely on colour alone. */
-            r={8 + site.riskScore * 14}
-            fill={rampColor(site.riskScore)}
+            r={8 + (site.riskScore / max) * 14}
+            fill={rampColor(site.riskScore, max)}
             stroke="var(--surface-1)"
             strokeWidth={2}
             onMouseMove={(event) =>

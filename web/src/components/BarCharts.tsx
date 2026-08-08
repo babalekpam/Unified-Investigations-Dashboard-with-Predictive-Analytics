@@ -116,9 +116,10 @@ export function WorkloadChart({ rows }: { rows: WorkloadRow[] }) {
   )
 }
 
-// Ordinal ramp: four ordered buckets, light→dark. The lightest step used here is 250,
-// the lightest that still clears 2:1 against the light surface.
-const AGING_STEPS = ['var(--seq-250)', 'var(--seq-350)', 'var(--seq-450)', 'var(--seq-650)']
+// Ordinal ramp: four ordered buckets, light→dark. These are the ordinal tokens, not the
+// sequential ones — an ordinal ramp's lightest step has to clear 2:1 against the surface,
+// where a sequential ramp's lightest step is allowed to recede into it.
+const AGING_STEPS = ['var(--ord-1)', 'var(--ord-2)', 'var(--ord-3)', 'var(--ord-4)']
 
 /** Case aging buckets (Section 7.2) — an ordered magnitude, so one hue, light to dark. */
 export function AgingChart({ buckets }: { buckets: AgingBucket[] }) {

@@ -54,6 +54,29 @@ seconds on a laptop. A managed training service adds a control plane, a cost cen
 deployment surface for no accuracy. If Phase 4 brings deep models or image analytics on
 camera feeds, that trade changes; the training job is a container either way.
 
+## Palette
+
+The dashboards and the charts are coloured from the AT&T brand palette: the brand
+interaction blue `#0568AE` leads, with one-hue ramps derived from it, and the brand black
+`#191919` and light grey `#F2F2F2` as the neutrals. Status colours (good / warning /
+critical) stay reserved and outside the brand hues, so a state can never be mistaken for a
+data series; each one ships with an icon and a word as well as a colour.
+
+Two ramps rather than one. The *sequential* ramp encodes a continuous magnitude — the risk
+score on the heat map — and its lightest step is allowed to recede toward the surface,
+meaning "near zero". The *ordinal* ramp encodes discrete ordered buckets — case aging — and
+is held to a stricter floor so the lightest bucket still reads against the surface.
+
+Every value was checked with a palette validator against the exact surfaces it renders on,
+in both light and dark: the categorical pair passes the lightness band, chroma floor,
+colour-vision separation and contrast checks; the ordinal ramp passes monotonicity, step
+spacing and light-end contrast; and small text clears WCAG AA on both grounds.
+
+These hex values are taken from AT&T's publicly visible brand usage rather than from an
+internal brand book. Confirm them against AT&T Brand Central before the deck goes in front
+of anyone — the tokens live in one place (`web/src/styles.css`), so a correction is a
+find-and-replace, not a redesign.
+
 ## Versions
 
 | Component | Version |
