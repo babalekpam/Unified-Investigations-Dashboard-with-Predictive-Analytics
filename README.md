@@ -30,6 +30,14 @@ what was actually built and explains each substitution.
 | Link analysis (beyond the proposal) | `LinkGraphService` + `LinkGraphView` — entity graph across cases, sites, incidents, badges and alarms |
 | 8 Roadmap | Phase 1–2 deliverables; see *Scope* below |
 
+## For the proposal pack
+
+[`docs/GSIH-Technology-Stack.docx`](docs/GSIH-Technology-Stack.docx) is a Word technical
+appendix covering the full stack — layer-by-layer selections, the substitutions worth
+defending, security mapping, failure behaviour, versions, delivery status and the
+assumptions Phase 1 should confirm. Regenerate it with `node docs/build_stack_doc.js
+docs/GSIH-Technology-Stack.docx` after installing `docx` from npm.
+
 ## Repository layout
 
 ```
