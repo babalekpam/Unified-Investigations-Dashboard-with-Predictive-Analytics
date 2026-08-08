@@ -89,6 +89,16 @@ export interface TypeVolume {
   caseCount: number
 }
 
+/**
+ * One cell of the weekday × hour incident grid. `dayOfWeek` is 0 for Monday, `hour` is the
+ * hour at the site rather than in UTC, and the server always sends all 168 cells.
+ */
+export interface HeatCell {
+  dayOfWeek: number
+  hour: number
+  count: number
+}
+
 export interface ManagerView {
   region: string | null
   openCases: number
@@ -101,6 +111,7 @@ export interface ManagerView {
   caseAging: AgingBucket[]
   volumeByType: TypeVolume[]
   vandalismAlerts: RiskAlert[]
+  incidentHeatmap: HeatCell[]
 }
 
 export interface RegionPosture {
@@ -135,6 +146,7 @@ export interface ExecutiveView {
   topHotspots: RiskAlert[]
   vandalismForecast: ForecastPoint[]
   riskPosture: RiskPosture
+  incidentHeatmap: HeatCell[]
 }
 
 /* ---------------------------------------------------------------- link analysis */

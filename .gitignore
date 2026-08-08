@@ -42,3 +42,7 @@ mlruns/
 
 # TypeScript incremental build cache
 *.tsbuildinfo
+
+# Built output of the offline walkthrough — regenerate with:
+#   npx vite build --config vite.demo.config.ts && node demo/package.mjs
+web/demo-dist/

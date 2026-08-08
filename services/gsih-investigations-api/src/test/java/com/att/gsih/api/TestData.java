@@ -21,7 +21,12 @@ final class TestData {
   private TestData() {}
 
   static Site site(String code, String region) {
+    return site(code, region, "America/Chicago");
+  }
+
+  static Site site(String code, String region, String timezone) {
     Site s = new Site();
+    s.setTimezone(timezone);
     s.setSiteCode(code);
     s.setName("Site " + code);
     s.setRegion(region);

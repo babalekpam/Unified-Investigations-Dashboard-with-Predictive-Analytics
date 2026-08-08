@@ -9,9 +9,10 @@ const PADDING = { top: 12, right: 16, bottom: 28, left: 40 }
 /**
  * Projected vandalism incidents per day with its prediction interval (Section 6.5).
  *
- * One series, so there is no legend box — the title names it. The interval band is
- * drawn as the same hue at low opacity rather than as a second series, because it is
- * the uncertainty around this line and not a thing of its own.
+ * One series, so the key below is not a categorical legend: it names the line and, more
+ * usefully, says what the shaded band around it means. The band is the same hue at low
+ * opacity rather than a second colour, because it is the uncertainty around this line
+ * and not a series of its own — a second hue would invite reading it as one.
  */
 export function ForecastChart({ points }: { points: ForecastPoint[] }) {
   const { show, hide, element } = useTooltip()
@@ -29,6 +30,12 @@ export function ForecastChart({ points }: { points: ForecastPoint[] }) {
     const y = (value: number) => PADDING.top + plotHeight - (value / maxValue) * plotHeight
 
     const line = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(i)} ${y(p.predicted)}`).join(' ')
+    // The area is the same line closed to the baseline. It carries no extra information —
+    // it gives the eye a body to follow across a 90-day span where a 2px stroke alone
+    // reads as a thread.
+    const area = `${line} L ${x(points.length - 1)} ${PADDING.top + plotHeight} L ${x(0)} ${
+      PADDING.top + plotHeight
+    } Z`
     const band = [
       ...points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(i)} ${y(p.upper)}`),
       ...points
@@ -43,7 +50,7 @@ export function ForecastChart({ points }: { points: ForecastPoint[] }) {
       y: y(maxValue * fraction),
     }))
 
-    return { x, y, line, band, ticks, maxValue, plotHeight }
+    return { x, y, line, area, band, ticks, maxValue, plotHeight }
   }, [points])
 
   if (!geometry) {
@@ -75,7 +82,30 @@ export function ForecastChart({ points }: { points: ForecastPoint[] }) {
   const last = points[points.length - 1]
 
   return (
-    <div style={{ position: 'relative' }}>
+    <div className="chart-frame">
+      <ul className="legend">
+        <li>
+          <span
+            className="swatch"
+            style={{ background: 'var(--series-1)', height: 3, width: 16, borderRadius: 2 }}
+            aria-hidden="true"
+          />
+          Projected incidents per day
+        </li>
+        <li>
+          <span
+            className="swatch"
+            style={{
+              background: 'color-mix(in srgb, var(--series-1) 22%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--series-1) 45%, transparent)',
+              width: 16,
+            }}
+            aria-hidden="true"
+          />
+          80% prediction interval
+        </li>
+      </ul>
+
       <svg
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         width="100%"
@@ -83,6 +113,12 @@ export function ForecastChart({ points }: { points: ForecastPoint[] }) {
         role="img"
         aria-label={`Projected vandalism incidents per day from ${first.date} to ${last.date}`}
       >
+        <defs>
+          <linearGradient id="forecast-fill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--series-1)" stopOpacity="0.28" />
+            <stop offset="100%" stopColor="var(--series-1)" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
         {geometry.ticks.map((tick) => (
           <g key={tick.value}>
             <line
@@ -99,8 +135,37 @@ export function ForecastChart({ points }: { points: ForecastPoint[] }) {
           </g>
         ))}
 
-        <path d={geometry.band} fill="var(--series-1)" opacity={0.16} />
-        <path d={geometry.line} fill="none" stroke="var(--series-1)" strokeWidth={2} strokeLinejoin="round" />
+        <path d={geometry.band} fill="var(--series-1)" opacity={0.14} />
+        <path d={geometry.area} fill="url(#forecast-fill)" />
+        <path
+          d={geometry.line}
+          fill="none"
+          stroke="var(--series-1)"
+          strokeWidth={2}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+
+        {/* The last point is labelled directly: it is the number the reader came for, and
+            a legend entry cannot say "and it lands here". */}
+        <circle
+          cx={geometry.x(points.length - 1)}
+          cy={geometry.y(last.predicted)}
+          r={4}
+          fill="var(--series-1)"
+          stroke="var(--surface-1)"
+          strokeWidth={2}
+        />
+        <text
+          x={geometry.x(points.length - 1) - 6}
+          y={geometry.y(last.predicted) - 10}
+          textAnchor="end"
+          fontSize={10.5}
+          fontWeight={700}
+          fill="var(--text-primary)"
+        >
+          {last.predicted.toFixed(1)}/day
+        </text>
 
         {hoverIndex !== null ? (
           <g>

@@ -109,4 +109,35 @@ describe('link graph', () => {
     )
     expect(screen.getByText(/Nothing else in the last year connects/)).toBeInTheDocument()
   })
+
+  it('drops the outer labels once the ring is too crowded to read them', () => {
+    // Twenty-odd labels around a circle collide into an unreadable band. Past the
+    // threshold only the seed and its immediate neighbours stay named; the rest are a
+    // hover or the table away.
+    const crowded: LinkGraph = {
+      ...graph,
+      nodes: [
+        ...graph.nodes,
+        ...Array.from({ length: 20 }, (_, index) => ({
+          id: `incident:extra-${index}`,
+          type: 'INCIDENT' as const,
+          label: `EXTRA-${index}`,
+          sublabel: '2026-07-02',
+          hops: 2,
+          weight: 1,
+          detail: [],
+        })),
+      ],
+    }
+
+    render(<LinkGraphView graph={crowded} />)
+
+    const canvas = screen.getByRole('img', { name: /Link graph around case SW-1/i })
+    // The site one step out keeps its label...
+    expect(within(canvas as HTMLElement).getByText('Dallas Yard')).toBeInTheDocument()
+    // ...and a two-step incident does not print one.
+    expect(within(canvas as HTMLElement).queryByText('EXTRA-7')).not.toBeInTheDocument()
+    // It is still listed in the table view, which is not gated on crowding.
+    expect(screen.getByText('EXTRA-7')).toBeInTheDocument()
+  })
 })

@@ -1,6 +1,6 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import type { ExecutiveView, InvestigatorView, ManagerView } from '../api/types'
+import type { ExecutiveView, HeatCell, InvestigatorView, ManagerView } from '../api/types'
 import { ExecutiveDashboard } from './ExecutiveView'
 import { InvestigatorDashboard } from './InvestigatorView'
 import { ManagerDashboard } from './ManagerView'
@@ -56,6 +56,22 @@ const investigatorData: InvestigatorView = {
   ],
 }
 
+/** A complete 168-cell grid, with a Friday-night ridge the assertions can point at. */
+function heatGrid(): HeatCell[] {
+  const cells: HeatCell[] = []
+  for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek += 1) {
+    for (let hour = 0; hour < 24; hour += 1) {
+      const afterHours = hour >= 22 || hour <= 2
+      cells.push({
+        dayOfWeek,
+        hour,
+        count: dayOfWeek === 4 && hour === 23 ? 9 : afterHours ? 2 : 0,
+      })
+    }
+  }
+  return cells
+}
+
 const managerData: ManagerView = {
   region: 'SOUTHWEST',
   openCases: 24,
@@ -74,8 +90,13 @@ const managerData: ManagerView = {
     { bucket: '31-90 days', caseCount: 5 },
     { bucket: '90+ days', caseCount: 3 },
   ],
-  volumeByType: [{ incidentType: 'VANDALISM', caseCount: 14 }],
+  volumeByType: [
+    { incidentType: 'VANDALISM', caseCount: 14 },
+    { incidentType: 'THEFT', caseCount: 6 },
+    { incidentType: 'TRESPASS', caseCount: 2 },
+  ],
   vandalismAlerts: investigatorData.alerts,
+  incidentHeatmap: heatGrid(),
 }
 
 const executiveData: ExecutiveView = {
@@ -97,6 +118,7 @@ const executiveData: ExecutiveView = {
     horizonDays: 30,
   })),
   riskPosture: { highRiskSites: 6, mediumRiskSites: 14, lowRiskSites: 80, asOf: '2026-08-07' },
+  incidentHeatmap: heatGrid(),
 }
 
 describe('investigator view', () => {
@@ -150,7 +172,10 @@ describe('executive view', () => {
     render(<ExecutiveDashboard data={executiveData} />)
     expect(screen.getByText('480')).toBeInTheDocument()
     expect(screen.getByText(/8.4% year over year/)).toBeInTheDocument()
-    expect(screen.getByText('$1,875,000')).toBeInTheDocument()
+    // The tile leads with the compact figure because that is what gets read across a
+    // room; the exact number is still on the card, in the caption underneath.
+    expect(screen.getByText('$1.9M')).toBeInTheDocument()
+    expect(screen.getByText(/\$1,875,000/)).toBeInTheDocument()
   })
 
   it('draws the forecast and says out loud that it is a probability', () => {
@@ -168,5 +193,100 @@ describe('executive view', () => {
 
     const table = screen.getByText('Top hotspots').closest('section')!
     expect(within(table).getByText('Dallas Yard')).toBeInTheDocument()
+  })
+})
+
+describe('the reporting charts', () => {
+  it('breaks the estate down as parts of a whole, with every share written out', () => {
+    render(<ExecutiveDashboard data={executiveData} />)
+
+    const donut = screen.getByRole('img', { name: /sites scored/i })
+    expect(donut).toBeInTheDocument()
+    // 6 + 14 + 80 = 100 sites, and the bands are named rather than left to the colour.
+    expect(within(donut.parentElement!).getByText('100')).toBeInTheDocument()
+    // "High risk" also appears as a badge in the hotspot table, which is the point of a
+    // reserved status palette: the same words carry the same meaning in both places.
+    expect(screen.getAllByText('High risk').length).toBeGreaterThan(0)
+    expect(screen.getByText('Medium risk')).toBeInTheDocument()
+    expect(screen.getByText('Low risk')).toBeInTheDocument()
+  })
+
+  it('names the busiest hour of the heat map instead of leaving it to be eyeballed', () => {
+    render(<ExecutiveDashboard data={executiveData} />)
+
+    const heat = screen.getByRole('img', { name: /Incidents by weekday and hour/i })
+    expect(heat).toHaveAccessibleName(/busiest cell is Fri at 23:00 with 9 incidents/i)
+    expect(screen.getAllByText(/Fri 23:00/).length).toBeGreaterThan(0)
+  })
+
+  it('plots age against exposure so the old-and-expensive corner is visible', () => {
+    render(<ExecutiveDashboard data={executiveData} />)
+    expect(
+      screen.getByRole('img', { name: /Financial exposure against Age in days/i }),
+    ).toBeInTheDocument()
+  })
+
+  it('compares regions as columns', () => {
+    render(<ExecutiveDashboard data={executiveData} />)
+    expect(screen.getByRole('img', { name: /Cases by Southwest, Northeast/i })).toBeInTheDocument()
+  })
+
+  it('folds the tail of the case mix into Other rather than drawing slivers', () => {
+    const many: ManagerView = {
+      ...managerData,
+      volumeByType: [
+        { incidentType: 'VANDALISM', caseCount: 14 },
+        { incidentType: 'THEFT', caseCount: 6 },
+        { incidentType: 'FRAUD', caseCount: 5 },
+        { incidentType: 'TRESPASS', caseCount: 4 },
+        { incidentType: 'ASSET_LOSS', caseCount: 3 },
+        { incidentType: 'POLICY_VIOLATION', caseCount: 2 },
+        { incidentType: 'OTHER', caseCount: 1 },
+      ],
+    }
+    render(<ManagerDashboard data={many} />)
+    expect(screen.getByText('Other (2 types)')).toBeInTheDocument()
+  })
+})
+
+describe('the tables', () => {
+  it('sorts on the column the reader clicks', () => {
+    const queue = [
+      { ...investigatorData.queue[0], caseNumber: 'SW-1001', ageDays: 20 },
+      { ...investigatorData.queue[0], caseNumber: 'SW-1002', ageDays: 3 },
+      { ...investigatorData.queue[0], caseNumber: 'SW-1003', ageDays: 61 },
+    ]
+    render(<InvestigatorDashboard data={{ ...investigatorData, queue }} />)
+
+    const numbers = () =>
+      screen
+        .getAllByRole('row')
+        .slice(1)
+        .map((row) => row.querySelector('td')?.textContent)
+        .filter((text) => text?.startsWith('SW-'))
+
+    // Age is numeric, so the first click opens on the largest — "which has been sitting
+    // longest" is the question being asked.
+    fireEvent.click(screen.getAllByText('Age')[0])
+    expect(numbers().slice(0, 3)).toEqual(['SW-1003', 'SW-1001', 'SW-1002'])
+
+    fireEvent.click(screen.getAllByText('Age')[0])
+    expect(numbers().slice(0, 3)).toEqual(['SW-1002', 'SW-1001', 'SW-1003'])
+  })
+
+  it('narrows every table on the page from the one filter box', () => {
+    const queue = [
+      { ...investigatorData.queue[0], caseNumber: 'SW-1001', title: 'Perimeter damage' },
+      { ...investigatorData.queue[0], caseNumber: 'SW-1002', title: 'Copper theft at yard' },
+    ]
+    render(<InvestigatorDashboard data={{ ...investigatorData, queue }} filter="copper" />)
+
+    expect(screen.getByText('Copper theft at yard')).toBeInTheDocument()
+    expect(screen.queryByText('Perimeter damage')).not.toBeInTheDocument()
+  })
+
+  it('says what it was filtering by when nothing matches', () => {
+    render(<InvestigatorDashboard data={investigatorData} filter="zzz-no-such-case" />)
+    expect(screen.getAllByText(/Nothing matches/).length).toBeGreaterThan(0)
   })
 })

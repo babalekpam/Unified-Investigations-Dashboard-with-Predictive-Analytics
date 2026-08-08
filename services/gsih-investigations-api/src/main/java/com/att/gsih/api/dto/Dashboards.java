@@ -73,13 +73,25 @@ public final class Dashboards {
       List<WorkloadRow> workload,
       List<AgingBucket> caseAging,
       List<TypeVolume> volumeByType,
-      List<RiskAlert> vandalismAlerts) {}
+      List<RiskAlert> vandalismAlerts,
+      List<HeatCell> incidentHeatmap) {}
 
   public record WorkloadRow(String assigneeEmail, long openCases, long overdue, double loadIndex) {}
 
   public record AgingBucket(String bucket, long caseCount) {}
 
   public record TypeVolume(IncidentType incidentType, long caseCount) {}
+
+  /**
+   * One cell of the when-do-we-get-hit heat map: incidents by weekday and hour.
+   *
+   * <p>{@code dayOfWeek} is 0 for Monday through 6 for Sunday, and {@code hour} is the hour
+   * <em>at the site</em>, not in UTC — a 22:00 spike in Dallas and a 22:00 spike in Frankfurt
+   * are the same operational pattern and belong in the same cell. The grid is always sent
+   * complete, all 168 cells including the empty ones, so the client draws a calendar rather
+   * than inferring gaps.
+   */
+  public record HeatCell(int dayOfWeek, int hour, long count) {}
 
   /** Section 7.3 — enterprise posture, major investigations, hotspots, predicted trend. */
   public record ExecutiveView(
@@ -91,7 +103,8 @@ public final class Dashboards {
       List<CaseSummary> majorInvestigations,
       List<RiskAlert> topHotspots,
       List<ForecastPoint> vandalismForecast,
-      RiskPosture riskPosture) {}
+      RiskPosture riskPosture,
+      List<HeatCell> incidentHeatmap) {}
 
   public record RegionPosture(
       String region, long caseCount, BigDecimal financialImpact, long highRiskSites) {}

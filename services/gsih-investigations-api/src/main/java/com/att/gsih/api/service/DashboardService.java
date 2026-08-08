@@ -6,6 +6,7 @@ import com.att.gsih.api.domain.Site;
 import com.att.gsih.api.dto.Dashboards.AgingBucket;
 import com.att.gsih.api.dto.Dashboards.CaseSummary;
 import com.att.gsih.api.dto.Dashboards.ExecutiveView;
+import com.att.gsih.api.dto.Dashboards.HeatCell;
 import com.att.gsih.api.dto.Dashboards.InvestigatorView;
 import com.att.gsih.api.dto.Dashboards.ManagerView;
 import com.att.gsih.api.dto.Dashboards.RegionPosture;
@@ -21,8 +22,12 @@ import com.att.gsih.common.model.Enums.IncidentType;
 import com.att.gsih.common.model.Enums.RiskBand;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.DateTimeException;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -46,6 +51,16 @@ public class DashboardService {
 
   /** The window used for "recent activity" KPIs across all three views. */
   private static final int KPI_WINDOW_DAYS = 30;
+
+  /**
+   * The heat map reads six months, not the 30-day KPI window.
+   *
+   * <p>168 cells need enough events to show a shape: a month of incidents spread over a
+   * weekday × hour grid is mostly empty cells and a few ones, which reads as noise. Half a
+   * year is long enough for the after-hours ridge to separate from the daytime floor and
+   * short enough that a change in patrol pattern still shows up.
+   */
+  private static final int HEATMAP_WINDOW_DAYS = 180;
 
   /** A site is flagged as a repeat target at this many same-type incidents in 90 days. */
   static final int REPEAT_INCIDENT_THRESHOLD = 3;
@@ -167,7 +182,49 @@ public class DashboardService {
         cases.volumeByType(since, region).stream()
             .map(row -> new TypeVolume((IncidentType) row[0], (Long) row[1]))
             .toList(),
-        riskService.currentAlerts(region, 10));
+        riskService.currentAlerts(region, 10),
+        incidentHeatmap(region, now));
+  }
+
+  /**
+   * Incidents by weekday and hour over the last six months, in each site's own local time.
+   *
+   * <p>This is the observed counterpart to the model's predicted patrol window: the model
+   * says a site is likely to be hit, the heat map says when the estate is actually being hit.
+   * A supervisor rosters against the second and deploys against the first.
+   */
+  private List<HeatCell> incidentHeatmap(String region, Instant now) {
+    Instant since = now.minus(HEATMAP_WINDOW_DAYS, ChronoUnit.DAYS);
+    long[][] grid = new long[7][24];
+
+    for (Object[] row : incidents.occurrenceLocalTimes(since, region)) {
+      Instant occurredAt = (Instant) row[0];
+      if (occurredAt == null) {
+        continue;
+      }
+      ZonedDateTime local = occurredAt.atZone(zoneOf((String) row[1]));
+      grid[local.getDayOfWeek().getValue() - 1][local.getHour()]++;
+    }
+
+    List<HeatCell> cells = new ArrayList<>(7 * 24);
+    for (int day = 0; day < 7; day++) {
+      for (int hour = 0; hour < 24; hour++) {
+        cells.add(new HeatCell(day, hour, grid[day][hour]));
+      }
+    }
+    return cells;
+  }
+
+  /** A site with no timezone on record, or a bad one, falls back to UTC rather than failing. */
+  private static ZoneId zoneOf(String timezone) {
+    if (timezone == null || timezone.isBlank()) {
+      return ZoneOffset.UTC;
+    }
+    try {
+      return ZoneId.of(timezone);
+    } catch (DateTimeException unknownZone) {
+      return ZoneOffset.UTC;
+    }
   }
 
   private List<WorkloadRow> workload(String region, Instant now) {
@@ -270,7 +327,8 @@ public class DashboardService {
         cases.findTop10ByOrderByFinancialImpactDesc().stream().map(this::toSummary).toList(),
         riskService.currentAlerts(null, 10),
         riskService.forecastCurve(null, null),
-        riskService.posture(null));
+        riskService.posture(null),
+        incidentHeatmap(null, now));
   }
 
   /* ------------------------------------------------------------------ helpers */

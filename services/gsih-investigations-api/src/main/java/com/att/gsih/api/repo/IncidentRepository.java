@@ -61,6 +61,25 @@ public interface IncidentRepository extends JpaRepository<Incident, UUID> {
   List<Instant> occurrenceTimestamps(
       @Param("since") Instant since, @Param("region") String region);
 
+  /**
+   * Incident times paired with the timezone of the site they happened at.
+   *
+   * <p>The weekday/hour heat map is only meaningful in local time, and the bucketing is done
+   * in Java rather than in SQL for that reason: a database-side {@code extract(hour ...)}
+   * would have to pick one zone for an estate that spans several, and would smear a genuine
+   * 22:00 pattern across three columns.
+   */
+  @Query(
+      """
+      select i.occurredAt, s.timezone
+      from Incident i
+      left join Site s on s.siteCode = i.siteCode
+      where i.occurredAt >= :since
+        and (:region is null or i.region = :region)
+      """)
+  List<Object[]> occurrenceLocalTimes(
+      @Param("since") Instant since, @Param("region") String region);
+
   /** Every incident at a site inside the window, most recent first — link-graph expansion. */
   List<Incident> findBySiteCodeAndOccurredAtAfterOrderByOccurredAtDesc(
       String siteCode, Instant after);

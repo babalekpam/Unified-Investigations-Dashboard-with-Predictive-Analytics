@@ -169,6 +169,19 @@ export function LinkGraphView({ graph }: { graph: LinkGraph }) {
 
   const maxEdgeWeight = Math.max(...graph.edges.map((e) => e.weight), 1)
 
+  /**
+   * Which nodes carry a printed label.
+   *
+   * Past about twenty nodes the ring is dense enough that the labels collide into an
+   * unreadable band around the rim — worse than no labels, because it looks like data.
+   * Beyond that point only the seed, its immediate neighbours and whatever the reader has
+   * clicked stay named; everything else is one hover away, and the table below lists all
+   * of them.
+   */
+  const crowded = graph.nodes.length > 18
+  const labelled = (node: LinkNode, isSelected: boolean) =>
+    !crowded || node.hops <= 1 || isSelected
+
   return (
     <div style={{ position: 'relative' }}>
       <ul className="legend">
@@ -265,15 +278,17 @@ export function LinkGraphView({ graph }: { graph: LinkGraph }) {
               ) : (
                 <path d={shapeFor(node.type, radius)} {...common} />
               )}
-              <text
-                y={radius + 13}
-                textAnchor="middle"
-                fontSize={10.5}
-                fill="var(--text-primary)"
-                style={{ pointerEvents: 'none' }}
-              >
-                {node.label.length > 18 ? `${node.label.slice(0, 17)}…` : node.label}
-              </text>
+              {labelled(node, isSelected) ? (
+                <text
+                  y={radius + 13}
+                  textAnchor="middle"
+                  fontSize={10.5}
+                  fill="var(--text-primary)"
+                  style={{ pointerEvents: 'none' }}
+                >
+                  {node.label.length > 18 ? `${node.label.slice(0, 17)}…` : node.label}
+                </text>
+              ) : null}
             </g>
           )
         })}
