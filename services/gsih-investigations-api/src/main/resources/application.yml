@@ -1,8 +1,11 @@
 spring:
   application:
     name: gsih-investigations-api
-  profiles:
-    default: local
+  # No default profile on purpose. `local` activates LocalTokenController, which mints
+  # arbitrary-role tokens from a hardcoded key at a permitAll path — with `local` as the
+  # default, an image run without SPRING_PROFILES_ACTIVE shipped that endpoint live.
+  # The dangerous profile is now opt-in, and ProfileGuard fails startup if neither
+  # `local` nor `azure` is selected.
   datasource:
     url: ${GSIH_DB_URL:jdbc:postgresql://localhost:5432/gsih}
     username: ${GSIH_DB_USER:gsih}

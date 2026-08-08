@@ -141,7 +141,15 @@ public final class Normalizer {
    * Same source record, same UUID, forever — this is what makes the whole pipeline replay-safe.
    */
   public static UUID deterministicId(String sourceSystem, String sourceId) {
-    String key = sourceSystem + "::" + (sourceId == null ? "" : sourceId);
+    // A blank source id used to fold to the same key for every record from a system, and
+    // the sink's `on conflict (id) do update` then collapsed that entire feed onto one
+    // row — silently, while reporting a healthy ingest rate. A record with no natural key
+    // cannot be deduplicated, so it is rejected at the boundary instead.
+    if (sourceId == null || sourceId.isBlank()) {
+      throw new IllegalArgumentException(
+          "record from " + sourceSystem + " has no sourceId; it cannot be keyed or replayed");
+    }
+    String key = sourceSystem + "::" + sourceId;
     return UUID.nameUUIDFromBytes(key.getBytes(StandardCharsets.UTF_8));
   }
 

@@ -103,10 +103,18 @@ Spring profile swaps the Entra ID decoder for a symmetric key and exposes
 `/api/v1/auth/local-token`, so the stack can be demonstrated without a tenant. **The
 authorisation rules are identical in both profiles** — only token verification differs.
 
+There is no default profile, and the API refuses to start without one. That is deliberate:
+the local token endpoint will mint a token for any role a caller asks for, so an image
+started with no `SPRING_PROFILES_ACTIVE` must not quietly fall back to it. Set `azure` for
+a deployed environment (the Kubernetes manifest does) or `local` for the demo stack (the
+compose file does); anything else fails fast with a message saying so.
+
 Enforced and covered by tests:
 
 - an investigator can open only their own queue;
-- a manager is confined to their own region even when they ask for another;
+- a manager is confined to their own region even when they ask for another — including
+  through the queue override, site risk history and the site list, each of which checked
+  the role but not the region until a review caught it;
 - only an executive sees the enterprise view;
 - only the analytics workload identity can write risk scores;
 - every read is written to an append-only audit table.

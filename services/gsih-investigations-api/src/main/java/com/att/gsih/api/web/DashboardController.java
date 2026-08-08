@@ -49,8 +49,16 @@ public class DashboardController {
       throw new AccessDeniedException("investigators may only view their own queue");
     }
 
-    InvestigatorView view = dashboards.investigatorView(target, Instant.now());
-    audit.record(user, "READ", "dashboard:investigator", "target=" + target, view.openCases());
+    // Region confinement applies to the override too. A manager may open a team member's
+    // queue, but only the part of it inside their own region — otherwise the override is a
+    // way around the scoping every other endpoint enforces.
+    InvestigatorView view = dashboards.investigatorView(target, user.regionScope(), Instant.now());
+    audit.record(
+        user,
+        "READ",
+        "dashboard:investigator",
+        "target=%s region=%s".formatted(target, user.regionScope()),
+        view.openCases());
     return view;
   }
 

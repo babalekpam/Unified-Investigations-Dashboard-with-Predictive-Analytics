@@ -25,18 +25,22 @@ export default function App() {
   }, [session])
 
   const load = useCallback(
-    async (current: Session, which: UserRole) => {
+    async (current: Session, which: UserRole, isCurrent: () => boolean) => {
       setLoading(true)
       setError(null)
       try {
         if (which === 'INVESTIGATOR') {
-          setData(await api.investigatorView(current.token))
+          const next = await api.investigatorView(current.token)
+          if (isCurrent()) setData(next)
         } else if (which === 'MANAGER') {
-          setData(await api.managerView(current.token, current.region))
+          const next = await api.managerView(current.token, current.region)
+          if (isCurrent()) setData(next)
         } else {
-          setData(await api.executiveView(current.token))
+          const next = await api.executiveView(current.token)
+          if (isCurrent()) setData(next)
         }
       } catch (cause) {
+        if (!isCurrent()) return
         setData(null)
         if (cause instanceof ApiError && cause.status === 401) {
           // The token is no longer good for anything; drop it rather than leaving the
@@ -46,14 +50,24 @@ export default function App() {
         }
         setError(cause instanceof Error ? cause.message : 'Something went wrong')
       } finally {
-        setLoading(false)
+        if (isCurrent()) setLoading(false)
       }
     },
     [],
   )
 
   useEffect(() => {
-    if (session) void load(session, tab)
+    if (!session) return
+    // Clearing first is load-bearing, not tidiness: ActiveView casts `data` to the type the
+    // *current* tab expects, so rendering one more frame with the previous view's payload
+    // reads a field that does not exist and throws. The guard also drops a slow response
+    // for a tab the user has already left.
+    setData(null)
+    let cancelled = false
+    void load(session, tab, () => !cancelled)
+    return () => {
+      cancelled = true
+    }
   }, [session, tab, load])
 
   if (!session) {

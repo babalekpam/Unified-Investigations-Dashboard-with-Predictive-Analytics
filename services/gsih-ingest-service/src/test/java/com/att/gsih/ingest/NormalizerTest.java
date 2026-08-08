@@ -36,6 +36,26 @@ class NormalizerTest {
   }
 
   @Test
+  void aRecordWithNoSourceIdIsRejectedRatherThanFoldedOntoOneRow() {
+    // Every record from a system used to derive the same UUID from a blank id, and the
+    // sink's upsert then collapsed the entire feed onto a single row while still reporting
+    // a healthy ingest rate.
+    for (String missing : new String[] {null, "", "   "}) {
+      RawIncident raw =
+          new RawIncident(
+              "D3_SECURITY", missing, "SITE-1", "Vandalism", "2", "d", "r",
+              Instant.now(), null, Map.of());
+      org.assertj.core.api.Assertions.assertThatThrownBy(() -> normalizer.incident(raw))
+          .isInstanceOf(IllegalArgumentException.class)
+          .hasMessageContaining("sourceId");
+    }
+
+    // Two distinct ids still key apart, which is the property the rejection protects.
+    assertThat(Normalizer.deterministicId("D3_SECURITY", "A"))
+        .isNotEqualTo(Normalizer.deterministicId("D3_SECURITY", "B"));
+  }
+
+  @Test
   void mapsVendorFieldsOntoTheCanonicalModel() {
     CanonicalRows.IncidentRow row = normalizer.incident(incident("INC-1"));
     assertThat(row.sourceSystem()).isEqualTo(SourceSystem.D3_SECURITY);

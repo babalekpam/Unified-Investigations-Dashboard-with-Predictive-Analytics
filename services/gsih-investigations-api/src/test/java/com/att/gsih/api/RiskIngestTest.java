@@ -28,7 +28,9 @@ class RiskIngestTest {
   @Autowired RiskScoreRepository riskScores;
   @Autowired SiteRepository sites;
 
-  private static final LocalDate TODAY = LocalDate.of(2026, 8, 7);
+  // Relative, not hardcoded: forecastCurve deliberately serves only points from today
+  // forward, so a fixed literal quietly ages out of the window and takes the test with it.
+  private static final LocalDate TODAY = LocalDate.now();
 
   @BeforeEach
   void seed() {
@@ -101,6 +103,44 @@ class RiskIngestTest {
     assertThat(top.topFactors()).isNotEmpty();
     assertThat(top.topFactors().get(0).name()).isEqualTo("Poor site lighting");
     assertThat(top.topFactors().get(0).contribution()).isEqualTo(0.6);
+  }
+
+  @Test
+  void anewProjectionReplacesTheOldOneRatherThanAccumulating() {
+    java.time.LocalDate today = java.time.LocalDate.now();
+
+    // A long run, then a shorter one for the same scope.
+    riskService.saveForecasts(
+        new ForecastBatch(
+            "v1",
+            java.util.stream.IntStream.range(0, 6)
+                .mapToObj(i -> new ForecastRow(null, null, 30, today.plusDays(i), 1.0, 0.5, 1.5))
+                .toList()));
+    riskService.saveForecasts(
+        new ForecastBatch(
+            "v2",
+            java.util.stream.IntStream.range(0, 3)
+                .mapToObj(i -> new ForecastRow(null, null, 30, today.plusDays(i), 2.0, 1.0, 3.0))
+                .toList()));
+
+    var curve = riskService.forecastCurve(null, null);
+    // Merging by date left days 3-5 behind from the superseded run, so the stored curve
+    // was a blend of two projections that never existed together.
+    assertThat(curve).hasSize(3);
+    assertThat(curve).allSatisfy(p -> assertThat(p.predicted()).isEqualTo(2.0));
+  }
+
+  @Test
+  void pastDatedPointsAreNotServedAsAForecast() {
+    java.time.LocalDate today = java.time.LocalDate.now();
+    riskService.saveForecasts(
+        new ForecastBatch(
+            "v1",
+            List.of(
+                new ForecastRow(null, null, 30, today.minusDays(3), 9.0, 8.0, 10.0),
+                new ForecastRow(null, null, 30, today, 1.0, 0.5, 1.5))));
+
+    assertThat(riskService.forecastCurve(null, null)).hasSize(1);
   }
 
   @Test

@@ -69,9 +69,9 @@ public class DashboardService {
   /* ------------------------------------------------------------------ Section 7.1 */
 
   @Transactional(readOnly = true)
-  public InvestigatorView investigatorView(String email, Instant now) {
+  public InvestigatorView investigatorView(String email, String regionScope, Instant now) {
     List<CaseRecord> queue =
-        cases.findByAssigneeEmailIgnoreCaseAndStatusNot(email, CaseStatus.CLOSED).stream()
+        cases.openQueueFor(email, CaseStatus.CLOSED, regionScope).stream()
             .sorted(
                 Comparator.comparing((CaseRecord c) -> c.getPriority().ordinal())
                     .reversed()
@@ -241,7 +241,12 @@ public class DashboardService {
     Map<String, Long> highRiskByRegion =
         riskService.currentAlerts(null, Integer.MAX_VALUE).stream()
             .filter(a -> a.riskBand() == RiskBand.HIGH)
-            .collect(Collectors.groupingBy(RiskAlert::region, Collectors.counting()));
+            // groupingBy throws on a null key, and risk_score.region is nullable — a site
+            // whose region has not been backfilled would take the whole executive view down.
+            .collect(
+                Collectors.groupingBy(
+                    alert -> alert.region() == null ? "UNASSIGNED" : alert.region(),
+                    Collectors.counting()));
 
     List<RegionPosture> regions =
         cases.volumeByRegion(yearStart).stream()

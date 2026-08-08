@@ -102,7 +102,10 @@ with DAG(
         dag, "gold_publish", "gold_publish.py",
         ["--jdbc-url", "{{ var.value.gsih_jdbc_url }}",
          "--db-user", "{{ var.value.gsih_db_user }}",
-         "--db-password", "{{ conn.gsih_warehouse.password }}"],
+         "--db-password", "{{ conn.gsih_warehouse.password }}",
+         # Explicit: the event feeds belong to the streaming path, and publishing them
+         # from here would overwrite its rows.
+         "--tables", "silver.incident", "silver.case_record"],
     )
 
     # Scoring runs on AKS rather than Databricks: it is a small scikit-learn job against

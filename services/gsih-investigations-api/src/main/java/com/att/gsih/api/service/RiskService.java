@@ -105,7 +105,8 @@ public class RiskService {
   /** The 30 / 60 / 90-day projection of Section 6.5. */
   @Transactional(readOnly = true)
   public List<ForecastPoint> forecastCurve(String region, String siteCode) {
-    return forecasts.curve(region, siteCode).stream()
+    // Only from today forward: a superseded run's past-dated points are not a forecast.
+    return forecasts.curve(region, siteCode, LocalDate.now()).stream()
         .map(
             (Forecast f) ->
                 new ForecastPoint(
@@ -187,23 +188,18 @@ public class RiskService {
   /** Replaces the stored projection for each site / horizon combination in the batch. */
   @Transactional
   public int saveForecasts(com.att.gsih.api.dto.RiskIngest.ForecastBatch batch) {
-    List<Forecast> existing = forecasts.findAll();
-    Map<String, Forecast> index =
-        existing.stream()
-            .collect(
-                Collectors.toMap(
-                    f -> forecastKey(f.getSiteCode(), f.getRegion(), f.getForecastDate()),
-                    Function.identity(),
-                    (a, b) -> a));
+    // Replace each scope rather than merging into it. Upserting by date alone left every
+    // point from a previous, longer run in place, so the stored curve grew a tail of
+    // past-dated points that no run had produced together.
+    batch.points().stream()
+        .map(row -> forecastScope(row.siteCode(), row.region()))
+        .distinct()
+        .forEach(scope -> forecasts.deleteScope(scope[1], scope[0]));
 
     List<Forecast> rows = new java.util.ArrayList<>();
     for (com.att.gsih.api.dto.RiskIngest.ForecastRow row : batch.points()) {
-      Forecast f =
-          index.getOrDefault(
-              forecastKey(row.siteCode(), row.region(), row.forecastDate()), new Forecast());
-      if (f.getId() == null) {
-        f.setId(java.util.UUID.randomUUID());
-      }
+      Forecast f = new Forecast();
+      f.setId(java.util.UUID.randomUUID());
       f.setSiteCode(row.siteCode());
       f.setRegion(row.region());
       f.setHorizonDays(row.horizonDays());
@@ -219,8 +215,9 @@ public class RiskService {
     return rows.size();
   }
 
-  private static String forecastKey(String siteCode, String region, LocalDate date) {
-    return siteCode + "|" + region + "|" + date;
+  /** {siteCode, region} — the pair a single projection run owns. */
+  private static String[] forecastScope(String siteCode, String region) {
+    return new String[] {siteCode, region};
   }
 
   private String writeFactors(Map<String, Double> factors) {

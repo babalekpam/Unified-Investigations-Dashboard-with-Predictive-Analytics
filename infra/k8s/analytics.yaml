@@ -36,6 +36,14 @@ spec:
             - name: GSIH_MLFLOW_TRACKING_URI
               valueFrom:
                 configMapKeyRef: { name: gsih-config, key: mlflow-tracking-uri }
+            # Without this the scoring job posts anonymously and the API's
+            # ROLE_ANALYTICS_WRITER check rejects it, so no score ever reaches the
+            # warehouse and the dashboards sit on an empty predictive layer. The token is
+            # an Entra ID client-credentials token for the analytics workload identity,
+            # projected from Key Vault by the CSI driver.
+            - name: GSIH_API_TOKEN
+              valueFrom:
+                secretKeyRef: { name: gsih-analytics, key: api-token }
           resources:
             requests: { cpu: 500m, memory: 1Gi }
             limits: { cpu: "2", memory: 3Gi }

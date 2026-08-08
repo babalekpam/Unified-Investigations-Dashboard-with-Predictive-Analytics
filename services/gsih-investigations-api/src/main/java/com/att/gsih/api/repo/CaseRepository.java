@@ -18,7 +18,24 @@ public interface CaseRepository extends JpaRepository<CaseRecord, UUID> {
 
   Page<CaseRecord> findByAssigneeEmailIgnoreCase(String assigneeEmail, Pageable pageable);
 
-  List<CaseRecord> findByAssigneeEmailIgnoreCaseAndStatusNot(String email, CaseStatus status);
+  /**
+   * An investigator's open queue, confined to a region.
+   *
+   * <p>A null region means enterprise-wide. Managers may open a team member's queue, so this
+   * has to be scoped: without the region predicate a manager in one region could read the
+   * whole queue — and the site risk derived from it — of an investigator in another.
+   */
+  @Query(
+      """
+      select c from CaseRecord c
+      where lower(c.assigneeEmail) = lower(:email)
+        and c.status <> :closed
+        and (:region is null or c.region = :region)
+      """)
+  List<CaseRecord> openQueueFor(
+      @Param("email") String email,
+      @Param("closed") CaseStatus closed,
+      @Param("region") String region);
 
   @Query(
       """

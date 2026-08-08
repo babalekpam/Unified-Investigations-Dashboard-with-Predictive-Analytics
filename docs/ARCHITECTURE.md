@@ -91,6 +91,7 @@ Every write in the platform is keyed so that repeating it is harmless.
 | Read-only access to source systems | No write path exists. Connectors publish; nothing consumes back. |
 | Role-based access control | Entra ID app roles → Spring authorities → `@PreAuthorize` on every endpoint. |
 | Region confinement | The caller's `region` claim is threaded into the `where` clause of every query. A manager asking for another region gets their own. |
+| No accidental demo auth in production | The API selects no security profile by default and refuses to start without one. The `local` profile issues tokens for any requested role, so falling back to it silently would hand out executive tokens from a deployed image. |
 | Encryption in transit and at rest | TLS everywhere; Azure platform encryption on storage and the database. |
 | Audit logs for all access | Append-only `audit_event` row per read, with actor, role, query and result count. Writes run in their own transaction so an audit failure cannot roll back — or be rolled back by — the user's query. |
 | Data minimisation | Badge identifiers are salted-hashed at ingest; HR fields are limited to the authorised set; the raw badge number never enters the warehouse. |

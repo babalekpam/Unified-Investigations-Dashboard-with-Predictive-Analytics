@@ -94,8 +94,19 @@ public class RiskController {
   @GetMapping("/sites/{siteCode}/history")
   @PreAuthorize("hasAnyRole('INVESTIGATOR','MANAGER','EXECUTIVE')")
   @Operation(summary = "Score history for one site, to show whether an intervention worked")
-  public List<RiskAlert> history(@PathVariable String siteCode) {
-    return risk.siteHistory(siteCode);
+  public List<RiskAlert> history(Authentication authentication, @PathVariable String siteCode) {
+    CurrentUser user = CurrentUser.from(authentication);
+    List<RiskAlert> alerts = risk.siteHistory(siteCode);
+
+    // The endpoint took no Authentication at all, so a caller in one region could read the
+    // score history — and the region — of any site in the estate.
+    String scope = user.regionScope();
+    if (scope != null && alerts.stream().anyMatch(a -> !scope.equals(a.region()))) {
+      throw new org.springframework.security.access.AccessDeniedException(
+          "site belongs to another region");
+    }
+    audit.record(user, "READ", "risk:history", "site=" + siteCode, alerts.size());
+    return alerts;
   }
 
   @PostMapping("/scores")

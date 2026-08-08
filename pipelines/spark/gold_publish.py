@@ -18,12 +18,14 @@ import argparse
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 
+# Only the entities silver_standardize actually produces. access_event, alarm_event and
+# site were listed here as well, and the daily task failed on every run trying to read
+# tables no job writes: the streaming service owns the event feeds, and site is reference
+# data loaded separately. Publishing them from here would also have overwritten the
+# streaming path's rows with an empty result.
 SERVING_TABLES = {
     "silver.incident": "incident",
     "silver.case_record": "case_record",
-    "silver.access_event": "access_event",
-    "silver.alarm_event": "alarm_event",
-    "silver.site": "site",
 }
 
 

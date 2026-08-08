@@ -68,6 +68,42 @@ def map_with_default(column: Column, mapping: dict[str, str], default: str) -> C
     return expression
 
 
+def deterministic_id(source_system: Column, source_id: Column) -> Column:
+    """The same UUID the Java ingest service derives for the same source record.
+
+    Both paths write the same rows, so both must key them identically. Random ``uuid()``
+    here meant every batch run minted new primary keys for records the streaming path had
+    already inserted under a stable id — the gold publish then overwrote the table and the
+    ids churned daily, breaking every foreign reference and the upsert contract that makes
+    a replay safe.
+
+    Java uses ``UUID.nameUUIDFromBytes`` (a name-based UUIDv3: MD5 of the key, with the
+    version and variant bits set). This reproduces those bit twiddles on the MD5 hex so the
+    two engines agree byte for byte.
+    """
+    key = F.concat(source_system, F.lit("::"), source_id)
+    digest = F.md5(key)
+
+    # Version 3 in the high nibble of byte 6; variant 0b10 in the top bits of byte 8.
+    version_byte = F.lpad(
+        F.hex(F.bitwiseAND(F.conv(F.substring(digest, 13, 2), 16, 10).cast("int"), 0x0F) + 0x30),
+        2, "0")
+    variant_byte = F.lpad(
+        F.hex(F.bitwiseAND(F.conv(F.substring(digest, 17, 2), 16, 10).cast("int"), 0x3F) + 0x80),
+        2, "0")
+
+    return F.lower(
+        F.concat_ws(
+            "-",
+            F.substring(digest, 1, 8),
+            F.substring(digest, 9, 4),
+            F.concat(version_byte, F.substring(digest, 15, 2)),
+            F.concat(variant_byte, F.substring(digest, 19, 2)),
+            F.substring(digest, 21, 12),
+        )
+    )
+
+
 def deduplicate(frame: DataFrame, keys: list[str], order_by: str) -> DataFrame:
     """Keeps the latest version of each source record.
 
@@ -108,7 +144,7 @@ def standardise_incidents(bronze: DataFrame, sites: DataFrame) -> DataFrame:
         # Negative amounts are reversal entries in some finance feeds; clamping keeps the
         # loss KPIs monotonic.
         .withColumn("loss_amount", F.when(F.col("loss_amount") < 0, F.lit(0)).otherwise(F.col("loss_amount")))
-        .withColumn("id", F.expr("uuid()"))
+        .withColumn("id", deterministic_id(F.col("source_system"), F.col("source_id")))
     )
 
     deduped = deduplicate(canonical, ["source_system", "source_id"], "ingested_at")
@@ -160,7 +196,7 @@ def standardise_cases(bronze: DataFrame, sites: DataFrame) -> DataFrame:
                 F.col("ingested_at"),
             ).otherwise(F.to_timestamp("closed_at_raw")),
         )
-        .withColumn("id", F.expr("uuid()"))
+        .withColumn("id", deterministic_id(F.col("source_system"), F.col("source_id")))
     )
 
     deduped = deduplicate(canonical, ["source_system", "source_id"], "ingested_at")

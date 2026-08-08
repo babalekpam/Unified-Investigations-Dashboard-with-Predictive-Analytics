@@ -17,8 +17,11 @@ venv/
 .pytest_cache/
 .coverage
 
-# Models and experiment tracking (artifacts, not source)
-models/
+# Trained model artifacts and experiment tracking — NOT source.
+# Anchored to the repo root on purpose: a bare `models/` also matches the source package
+# analytics/gsih_analytics/models/, which silently kept the entire predictive layer out of
+# the repository.
+/models/
 mlruns/
 *.pkl
 
