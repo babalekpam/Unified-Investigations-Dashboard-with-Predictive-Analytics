@@ -83,8 +83,10 @@ jobs:
           curl -fsSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz \
             | tar xz kubeconform
           ./kubeconform -strict -summary -kubernetes-version 1.29.0 infra/k8s/*.yaml
-      - name: Word appendix structure
-        run: python3 docs/verify_spec_doc.py docs/GSIH-Platform-Specification.docx
+      - name: Word document structure
+        run: |
+          python3 docs/verify_spec_doc.py docs/GSIH-Platform-Specification.docx
+          python3 docs/verify_spec_doc.py docs/GSIH-Executive-Brief.docx
 
   analytics:
     name: Predictive analytics

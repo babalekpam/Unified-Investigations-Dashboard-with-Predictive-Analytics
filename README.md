@@ -29,19 +29,27 @@ what was actually built and explains each substitution.
 
 ## For the proposal pack
 
-[`docs/GSIH-Platform-Specification.docx`](docs/GSIH-Platform-Specification.docx) is the Word
-technical specification, in three parts: what the platform is and who it is for; how it
-works, from a vendor record to a number on a dashboard, including failure behaviour; and the
-technology stack, with the substitutions worth defending, versions, delivery status and the
-assumptions Phase 1 should confirm. Roughly 6,000 words, 20 tables, three appendices.
+The pack is two Word documents and a live walkthrough, because a proposal is read by two
+different audiences and they do not want the same thing.
+
+| Deliverable | For | What it is |
+|---|---|---|
+| [`docs/GSIH-Executive-Brief.docx`](docs/GSIH-Executive-Brief.docx) | Security leadership, budget holders | ~2,500 words. The situation today, what changes for each role, what the platform will *not* do, the phased plan, what is needed from the organisation, how the benefit would be measured, and the risks. No jargon, and deliberately no invented ROI figure — a measurement plan instead. |
+| [`docs/GSIH-Platform-Specification.docx`](docs/GSIH-Platform-Specification.docx) | The technical review team | ~6,000 words, 20 tables, three appendices. Part I what the platform is, Part II how it works down to failure behaviour, Part III the stack with the substitutions worth defending. |
+| The walkthrough build | Both, in the room | The real dashboard running offline against captured API responses — sortable, filterable, light and dark. Built from `web/demo`. |
+
+Both documents share one house style (`docs/doc_style.js`), so they read as one pack.
 
 ```bash
-npm i docx && node docs/build_spec_doc.js docs/GSIH-Platform-Specification.docx
+npm i docx
+node docs/build_brief_doc.js docs/GSIH-Executive-Brief.docx
+node docs/build_spec_doc.js  docs/GSIH-Platform-Specification.docx
+python3 docs/verify_spec_doc.py docs/GSIH-Executive-Brief.docx
 python3 docs/verify_spec_doc.py docs/GSIH-Platform-Specification.docx
 ```
 
 The verifier is what CI runs: Word's layout engine is not available there, but a table wider
-than the text column is the defect that ruins a printed appendix, and that is checkable.
+than the text column is the defect that ruins a printed document, and that is checkable.
 
 ## Repository layout
 

@@ -3,256 +3,53 @@
  * Word document the author can drop straight into their pack.
  *
  * Three parts, because a reviewer arrives with three questions in this order: what is this,
- * how does it work, and what is it built on. Verify the output with
+ * how does it work, and what is it built on. The house style is shared with the executive
+ * brief; see doc_style.js. Verify the output with
  * `python docs/verify_spec_doc.py <file>` — every table has to fit the text column, which is
  * the defect that only shows up on paper.
  */
 
 const fs = require('fs')
+const { Document, PageBreak, Packer, Paragraph, TableOfContents, TextRun } = require('docx')
 const {
-  AlignmentType,
-  BorderStyle,
-  Document,
-  Footer,
-  Header,
-  HeadingLevel,
-  LevelFormat,
-  PageBreak,
-  PageNumber,
-  Packer,
-  Paragraph,
-  ShadingType,
-  Table,
-  TableCell,
-  TableOfContents,
-  TableRow,
-  TextRun,
-  WidthType,
-} = require('docx')
+  BRAND,
+  HEADING,
+  INK,
+  INK_2,
+  bullet,
+  cover,
+  coverMeta,
+  h1,
+  h2,
+  h3,
+  note,
+  numbering,
+  pageFooter,
+  pageProperties,
+  para,
+  part,
+  runningHead,
+  table,
+  text,
+} = require('./doc_style')
 
-/* ------------------------------------------------------------------ tokens */
-
-// The AT&T brand palette: #067ab4, #3aa5dc, #ff7200, #fcb314. The deep blue carries the
-// chrome — filled header rows with white type on them, section rules — because it is the
-// only one of the four that holds its own against white (4.7:1). Headings take a darker
-// step of the same hue so they survive greyscale printing, and the accent orange appears
-// once, on the part divider, rather than competing with the blue throughout.
-const BRAND = '067AB4'
-const BRAND_LIGHT = '3AA5DC'
-const ACCENT = 'FF7200'
-const GOLD = 'FCB314'
-const HEADING = '05537A'
-const SUBHEAD = '067AB4'
-const INK = '111A21'
-const INK_2 = '4B5964'
-const MUTED = '6F7D89'
-const RULE = 'DCE3E9'
-const ZEBRA = 'F2F8FC'
-
-const CONTENT_WIDTH = 10080 // US Letter (12240) less 0.75" margins each side
-
-/* ------------------------------------------------------------------ helpers */
-
-const text = (value, opts = {}) =>
-  new TextRun({ text: value, font: 'Calibri', size: 20, color: INK, ...opts })
-
-const para = (value, opts = {}) => {
-  const { children, ...rest } = opts
-  return new Paragraph({
-    spacing: { after: 140, line: 276 },
-    children: children ?? [text(value)],
-    ...rest,
-  })
-}
-
-const h1 = (value) =>
-  new Paragraph({
-    heading: HeadingLevel.HEADING_1,
-    spacing: { before: 360, after: 160 },
-    border: { bottom: { style: BorderStyle.SINGLE, size: 12, color: BRAND, space: 6 } },
-    children: [new TextRun({ text: value, font: 'Calibri', size: 30, bold: true, color: HEADING })],
-  })
-
-const h2 = (value) =>
-  new Paragraph({
-    heading: HeadingLevel.HEADING_2,
-    spacing: { before: 260, after: 110 },
-    children: [new TextRun({ text: value, font: 'Calibri', size: 24, bold: true, color: SUBHEAD })],
-  })
-
-const h3 = (value) =>
-  new Paragraph({
-    heading: HeadingLevel.HEADING_3,
-    spacing: { before: 200, after: 80 },
-    children: [new TextRun({ text: value, font: 'Calibri', size: 21, bold: true, color: INK })],
-  })
-
-const bullet = (value, opts = {}) =>
-  new Paragraph({
-    numbering: { reference: 'bullets', level: 0 },
-    spacing: { after: 70, line: 276 },
-    children: opts.children ?? [text(value)],
-  })
-
-const note = (value) =>
-  new Paragraph({
-    spacing: { before: 120, after: 160 },
-    indent: { left: 240 },
-    border: { left: { style: BorderStyle.SINGLE, size: 14, color: BRAND, space: 10 } },
-    children: [text(value, { italics: true, color: INK_2 })],
-  })
-
-const cell = (content, opts = {}) => {
-  const { width, shading, bold, color, size, align } = opts
-  const paragraphs = Array.isArray(content) ? content : [content]
-  return new TableCell({
-    width: { size: width, type: WidthType.DXA },
-    shading: shading ? { type: ShadingType.CLEAR, fill: shading, color: 'auto' } : undefined,
-    margins: { top: 70, bottom: 70, left: 110, right: 110 },
-    children: paragraphs.map(
-      (value) =>
-        new Paragraph({
-          alignment: align,
-          spacing: { after: 0, line: 250 },
-          children: [
-            new TextRun({
-              text: value,
-              font: 'Calibri',
-              size: size ?? 18,
-              bold,
-              color: color ?? INK,
-            }),
-          ],
-        }),
-    ),
-  })
-}
-
-/**
- * A table with a brand-filled header row.
- *
- * Column widths must sum to the table width, and every cell repeats its own width —
- * percentage widths render incorrectly outside Word.
- */
-const table = (headers, rows, widths) =>
-  new Table({
-    width: { size: CONTENT_WIDTH, type: WidthType.DXA },
-    columnWidths: widths,
-    borders: {
-      top: { style: BorderStyle.SINGLE, size: 4, color: RULE },
-      bottom: { style: BorderStyle.SINGLE, size: 4, color: RULE },
-      left: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
-      right: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
-      insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: RULE },
-      insideVertical: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
-    },
-    rows: [
-      new TableRow({
-        tableHeader: true,
-        children: headers.map((label, i) =>
-          cell(label, { width: widths[i], shading: BRAND, bold: true, color: 'FFFFFF' }),
-        ),
-      }),
-      ...rows.map(
-        (row, index) =>
-          new TableRow({
-            children: row.map((value, i) =>
-              cell(value, {
-                width: widths[i],
-                shading: index % 2 === 1 ? ZEBRA : undefined,
-              }),
-            ),
-          }),
-      ),
-    ],
-  })
-
-const spacer = () => new Paragraph({ spacing: { after: 200 }, children: [] })
-
-/** A full-width part divider. Three of these carve the document into its three questions. */
-const part = (number, title, standfirst) => [
-  new Paragraph({ children: [new PageBreak()] }),
-  new Paragraph({
-    spacing: { before: 200, after: 0 },
-    children: [
-      new TextRun({
-        text: `PART ${number}`,
-        font: 'Calibri',
-        size: 20,
-        bold: true,
-        color: ACCENT,
-        characterSpacing: 80,
-      }),
-    ],
-  }),
-  new Paragraph({
-    spacing: { before: 60, after: 100 },
-    border: { bottom: { style: BorderStyle.SINGLE, size: 18, color: BRAND, space: 8 } },
-    children: [
-      new TextRun({ text: title, font: 'Calibri', size: 44, bold: true, color: HEADING }),
-    ],
-  }),
-  new Paragraph({
-    spacing: { after: 240 },
-    children: [new TextRun({ text: standfirst, font: 'Calibri', size: 22, color: INK_2 })],
-  }),
-]
-
-/* ------------------------------------------------------------------ content */
-
-const coverBlock = [
-  new Paragraph({
-    spacing: { before: 1400, after: 0 },
-    children: [
-      new TextRun({
-        text: 'TECHNICAL SPECIFICATION',
-        font: 'Calibri',
-        size: 20,
-        bold: true,
-        color: SUBHEAD,
-        characterSpacing: 60,
-      }),
-    ],
-  }),
-  new Paragraph({
-    spacing: { before: 120, after: 60 },
-    children: [
-      new TextRun({ text: 'Technology Stack', font: 'Calibri', size: 60, bold: true, color: HEADING }),
-    ],
-  }),
-  new Paragraph({
-    spacing: { after: 260 },
-    border: { bottom: { style: BorderStyle.SINGLE, size: 18, color: BRAND, space: 10 } },
-    children: [
-      new TextRun({
-        text: 'Global Security Intelligence Hub',
-        font: 'Calibri',
-        size: 30,
-        color: INK_2,
-      }),
-    ],
-  }),
-  para('', {
-    children: [
-      text('Unified Investigations Dashboard with Predictive Analytics', { size: 22, color: INK_2 }),
-    ],
-  }),
-  spacer(),
-  table(
-    ['Field', 'Detail'],
-    [
-      ['Document', 'Technical Appendix — Technology Stack'],
-      ['Companion to', 'Global Security Intelligence Hub — Complete Project Proposal, Section 9'],
-      ['Prepared by', 'Lekpam Nkawula'],
-      ['Role', 'Project Manager – Investigations (Candidate)'],
-      ['Version', '1.0'],
-      ['Date', 'August 2026'],
-      ['Status', 'For review'],
-    ],
-    [2600, 7480],
-  ),
-  new Paragraph({ children: [new PageBreak()] }),
-]
+const coverBlock = cover(
+  'TECHNICAL SPECIFICATION',
+  'Platform Specification',
+  'Global Security Intelligence Hub',
+  'Unified Investigations Dashboard with Predictive Analytics',
+).concat(
+  coverMeta([
+    ['Document', 'Technical Specification — platform, operation and technology stack'],
+    ['Companion to', 'Global Security Intelligence Hub — Complete Project Proposal'],
+    ['Read with', 'Executive Brief (non-technical summary of the same proposal)'],
+    ['Prepared by', 'Lekpam Nkawula'],
+    ['Role', 'Project Manager – Investigations (Candidate)'],
+    ['Version', '2.0'],
+    ['Date', 'August 2026'],
+    ['Status', 'For review'],
+  ]),
+)
 
 const body = [
   ...part('I', 'The platform', 'What it is, what it produces, and who it is for.'),
@@ -937,7 +734,6 @@ const body = [
     [1900, 8180],
   ),
 ]
-
 /* ------------------------------------------------------------------ document */
 
 const doc = new Document({
@@ -946,78 +742,19 @@ const doc = new Document({
   description:
     'What the platform is, how it works, and the technology stack it is built on — technical ' +
     'appendix to the Global Security Intelligence Hub project proposal',
-  numbering: {
-    config: [
-      {
-        reference: 'bullets',
-        levels: [
-          {
-            level: 0,
-            format: LevelFormat.BULLET,
-            text: '•',
-            alignment: AlignmentType.LEFT,
-            style: { paragraph: { indent: { left: 460, hanging: 240 } } },
-          },
-        ],
-      },
-    ],
-  },
-  styles: {
-    default: {
-      document: { run: { font: 'Calibri', size: 20, color: INK } },
-    },
-  },
+  numbering,
+  styles: { default: { document: { run: { font: 'Calibri', size: 20, color: INK } } } },
   sections: [
     {
-      properties: {
-        page: {
-          size: { width: 12240, height: 15840 },
-          margin: { top: 1080, right: 1080, bottom: 1080, left: 1080 },
-        },
-      },
+      properties: pageProperties,
       headers: {
-        default: new Header({
-          children: [
-            new Paragraph({
-              alignment: AlignmentType.RIGHT,
-              spacing: { after: 60 },
-              border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: RULE, space: 4 } },
-              children: [
-                new TextRun({
-                  text: 'Global Security Intelligence Hub  ·  Platform Specification',
-                  font: 'Calibri',
-                  size: 16,
-                  color: MUTED,
-                }),
-              ],
-            }),
-          ],
-        }),
+        default: runningHead('Global Security Intelligence Hub  ·  Platform Specification'),
       },
-      footers: {
-        default: new Footer({
-          children: [
-            new Paragraph({
-              alignment: AlignmentType.RIGHT,
-              children: [
-                new TextRun({
-                  text: 'Page ',
-                  font: 'Calibri',
-                  size: 16,
-                  color: MUTED,
-                }),
-                new TextRun({ children: [PageNumber.CURRENT], font: 'Calibri', size: 16, color: MUTED }),
-                new TextRun({ text: ' of ', font: 'Calibri', size: 16, color: MUTED }),
-                new TextRun({ children: [PageNumber.TOTAL_PAGES], font: 'Calibri', size: 16, color: MUTED }),
-              ],
-            }),
-          ],
-        }),
-      },
+      footers: { default: pageFooter() },
       children: [
         ...coverBlock,
         new Paragraph({
-          spacing: { after: 200 },
+          spacing: { before: 320, after: 200 },
           children: [
             new TextRun({ text: 'Contents', font: 'Calibri', size: 30, bold: true, color: HEADING }),
           ],
