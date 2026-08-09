@@ -148,10 +148,23 @@ chart itself.
 Everything below was run against a live PostgreSQL warehouse seeded with two years of
 generated history (69 sites, 1,121 incidents, 534 cases, 275k badge reads):
 
-- **49 Java tests** — canonical mapping, normalisation, RBAC, dashboard KPIs, risk ingest, link analysis
+- **60 Java tests** — canonical mapping, normalisation, RBAC, dashboard KPIs, risk ingest,
+  link analysis, the weekday × hour heat map
 - **25 Python tests** — leakage guard, model quality, forecaster behaviour, clustering
 - **3 parity tests** — streaming and batch vocabularies agree
-- **19 dashboard tests** — the three views, RBAC gating, chart accessibility, link graph
+- **31 dashboard tests** — the three views, tab isolation, sorting and filtering, the five
+  chart forms, RBAC gating, chart accessibility, link graph
+- **the deployed security profile** — the API booted as an OAuth2 resource server against a
+  stub OpenID provider with a generated RSA key: discovery, JWKS fetch, signature, issuer,
+  audience and expiry all enforced, roles and region mapped, and the demo token endpoint
+  absent. Only the tenant configuration itself remains for Phase 1.
+- **the streaming path** — an in-process Kafka broker to the real sink to a real PostgreSQL
+  warehouse: a message becomes a canonical row, a redelivery updates it instead of
+  duplicating it, one malformed payload does not stop the feed, and badge identifiers reach
+  the warehouse only as hashes
+- **the infrastructure definitions** — `terraform validate` and `kubeconform -strict`
+  against the Kubernetes 1.29 schemas, in CI. Valid and internally consistent; not the same
+  as applied to a subscription.
 - **end-to-end**: seed → train → score → 69 scores and a 90-day projection posted through
   the API → all three dashboards rendered, and every RBAC denial returned 403/401
 
@@ -186,10 +199,24 @@ predictive layer, the three dashboards, and the infrastructure definitions.
 
 Written as production-path code but not executed here, because they need the platforms
 themselves: the PySpark medallion jobs (Databricks), the Airflow DAGs (an Airflow
-deployment), and the Terraform footprint (an Azure subscription). The mapping-parity test
-covers the one correctness risk that spans the boundary between the Spark path and the
-Java path.
+deployment), and the Terraform footprint (an Azure subscription — the HCL is validated in
+CI, which is a different claim from applied). The mapping-parity test covers the one
+correctness risk that spans the boundary between the Spark path and the Java path.
+
+Two things the integration tests found the first time they ran, both of which had been
+sitting behind "it compiles": the ingest service could not start at all, because a headless
+Kafka consumer gets no `ObjectMapper` from Boot's auto-configuration; and a site published
+between two directory refreshes had its events written with no region, which is the field
+access confinement and every regional KPI depend on. Both are fixed and both now have a
+test that fails without the fix.
 
 Deliberately not built: connectors to any specific vendor system. Section 8's Phase 1
 exists precisely to confirm which systems are in use before that code is written — the
 `RawEvents` envelopes define the contract each connector will publish to.
+
+Two claims this repository does not make. The model's numbers say nothing about AT&T: it
+is trained on generated history, so what is proven is that the pipeline is leak-free and
+the method sound, not that it predicts anything about real sites. And video never enters
+the platform — the VMS feeds publish alarm events, which carry a camera id and an alarm
+type; footage stays in the VMS, where retention, chain of custody and access control for it
+already live.

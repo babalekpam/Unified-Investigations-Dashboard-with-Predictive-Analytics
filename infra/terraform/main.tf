@@ -186,10 +186,10 @@ resource "azurerm_kubernetes_cluster" "aks" {
   }
 
   network_profile {
-    network_plugin      = "azure"
-    network_policy      = "calico"
-    load_balancer_sku   = "standard"
-    outbound_type       = "userAssignedNATGateway"
+    network_plugin    = "azure"
+    network_policy    = "calico"
+    load_balancer_sku = "standard"
+    outbound_type     = "userAssignedNATGateway"
   }
 
   azure_active_directory_role_based_access_control {

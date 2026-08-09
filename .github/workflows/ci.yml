@@ -14,6 +14,22 @@ jobs:
   services:
     name: Java services
     runs-on: ubuntu-latest
+    services:
+      # The streaming ingest test writes through the real sink, whose idempotency is a
+      # PostgreSQL `on conflict` upsert. It skips itself when no database is reachable, so
+      # without this container it would quietly stop covering anything.
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: gsih
+          POSTGRES_USER: gsih
+          POSTGRES_PASSWORD: gsih
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U gsih"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -21,8 +37,54 @@ jobs:
           java-version: "21"
           distribution: temurin
           cache: maven
+      - name: Create the warehouse schema
+        # Flyway owns the schema and lives in the API module, so the API applies it once
+        # before the ingest tests write into it.
+        run: |
+          mvn -B -f services/pom.xml -q -DskipTests package
+          SPRING_PROFILES_ACTIVE=local \
+          GSIH_DB_URL=jdbc:postgresql://localhost:5432/gsih \
+          timeout 180 java -jar services/gsih-investigations-api/target/gsih-investigations-api-*.jar \
+            --spring.main.web-application-type=none &
+          for _ in $(seq 1 40); do
+            if PGPASSWORD=gsih psql -h localhost -U gsih -d gsih -tAc \
+                "select count(*) from flyway_schema_history where success" | grep -qv '^0$'; then
+              echo "schema ready"; break
+            fi
+            sleep 3
+          done
       - name: Build and test
+        env:
+          GSIH_TEST_DB_URL: jdbc:postgresql://localhost:5432/gsih
         run: mvn -B -f services/pom.xml verify
+      - name: Fail if the streaming path skipped instead of running
+        # An integration test that silently skips is worse than one that does not exist:
+        # the summary says "passed" either way.
+        run: |
+          report=services/gsih-ingest-service/target/surefire-reports/com.att.gsih.ingest.StreamingIngestTest.txt
+          grep -q "Skipped: 0" "$report" || { echo "streaming ingest test skipped"; cat "$report"; exit 1; }
+
+  infra:
+    name: Infrastructure definitions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+      - name: Terraform formatting and validity
+        working-directory: infra/terraform
+        run: |
+          terraform fmt -check -recursive
+          terraform init -backend=false -input=false
+          terraform validate
+      - name: Kubernetes manifests against the API schemas
+        run: |
+          curl -fsSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz \
+            | tar xz kubeconform
+          ./kubeconform -strict -summary -kubernetes-version 1.29.0 infra/k8s/*.yaml
+      - name: Word appendix structure
+        run: python3 docs/verify_stack_doc.py docs/GSIH-Technology-Stack.docx
 
   analytics:
     name: Predictive analytics
