@@ -29,11 +29,19 @@ what was actually built and explains each substitution.
 
 ## For the proposal pack
 
-[`docs/GSIH-Technology-Stack.docx`](docs/GSIH-Technology-Stack.docx) is a Word technical
-appendix covering the full stack — layer-by-layer selections, the substitutions worth
-defending, security mapping, failure behaviour, versions, delivery status and the
-assumptions Phase 1 should confirm. Regenerate it with `node docs/build_stack_doc.js
-docs/GSIH-Technology-Stack.docx` after installing `docx` from npm.
+[`docs/GSIH-Platform-Specification.docx`](docs/GSIH-Platform-Specification.docx) is the Word
+technical specification, in three parts: what the platform is and who it is for; how it
+works, from a vendor record to a number on a dashboard, including failure behaviour; and the
+technology stack, with the substitutions worth defending, versions, delivery status and the
+assumptions Phase 1 should confirm. Roughly 6,000 words, 20 tables, three appendices.
+
+```bash
+npm i docx && node docs/build_spec_doc.js docs/GSIH-Platform-Specification.docx
+python3 docs/verify_spec_doc.py docs/GSIH-Platform-Specification.docx
+```
+
+The verifier is what CI runs: Word's layout engine is not available there, but a table wider
+than the text column is the defect that ruins a printed appendix, and that is checkable.
 
 ## Repository layout
 

@@ -6,7 +6,7 @@ actually ruins a printed appendix: a table wider than the text column, a style r
 but never defined, a broken relationship, malformed XML. This script asserts those, so the
 document is known-sound even where its pagination has not been eyeballed.
 
-    python docs/verify_stack_doc.py docs/GSIH-Technology-Stack.docx
+    python docs/verify_spec_doc.py docs/GSIH-Platform-Specification.docx
 """
 
 from __future__ import annotations
@@ -85,4 +85,4 @@ def main(path: str) -> None:
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "docs/GSIH-Technology-Stack.docx")
+    main(sys.argv[1] if len(sys.argv) > 1 else "docs/GSIH-Platform-Specification.docx")

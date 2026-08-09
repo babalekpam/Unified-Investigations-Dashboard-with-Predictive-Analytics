@@ -84,7 +84,7 @@ jobs:
             | tar xz kubeconform
           ./kubeconform -strict -summary -kubernetes-version 1.29.0 infra/k8s/*.yaml
       - name: Word appendix structure
-        run: python3 docs/verify_stack_doc.py docs/GSIH-Technology-Stack.docx
+        run: python3 docs/verify_spec_doc.py docs/GSIH-Platform-Specification.docx
 
   analytics:
     name: Predictive analytics
