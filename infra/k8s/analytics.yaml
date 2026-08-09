@@ -1,0 +1,85 @@
+# On-demand scoring API. The scheduled training and scoring runs are Airflow-launched
+# pods from the same image, not long-running deployments.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gsih-analytics
+  namespace: gsih
+  labels:
+    app.kubernetes.io/name: gsih-analytics
+    app.kubernetes.io/part-of: global-security-intelligence-hub
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gsih-analytics
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gsih-analytics
+        azure.workload.identity/use: "true"
+    spec:
+      serviceAccountName: gsih-analytics
+      containers:
+        - name: analytics
+          image: ${GSIH_REGISTRY}/gsih-analytics:${GSIH_VERSION}
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: GSIH_DB_URL
+              valueFrom:
+                configMapKeyRef: { name: gsih-config, key: analytics-db-url }
+            - name: GSIH_API_BASE_URL
+              value: http://gsih-investigations-api.gsih.svc.cluster.local
+            - name: GSIH_MLFLOW_TRACKING_URI
+              valueFrom:
+                configMapKeyRef: { name: gsih-config, key: mlflow-tracking-uri }
+            # Without this the scoring job posts anonymously and the API's
+            # ROLE_ANALYTICS_WRITER check rejects it, so no score ever reaches the
+            # warehouse and the dashboards sit on an empty predictive layer. The token is
+            # an Entra ID client-credentials token for the analytics workload identity,
+            # projected from Key Vault by the CSI driver.
+            - name: GSIH_API_TOKEN
+              valueFrom:
+                secretKeyRef: { name: gsih-analytics, key: api-token }
+          resources:
+            requests: { cpu: 500m, memory: 1Gi }
+            limits: { cpu: "2", memory: 3Gi }
+          volumeMounts:
+            # The promoted model artifact, shared read-only with the scoring job so both
+            # score with the identical estimator.
+            - name: models
+              mountPath: /models
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: gsih-models
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gsih-models
+  namespace: gsih
+spec:
+  accessModes: ["ReadWriteMany"]
+  storageClassName: azurefile-csi
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gsih-analytics
+  namespace: gsih
+spec:
+  selector:
+    app.kubernetes.io/name: gsih-analytics
+  ports:
+    - port: 80
+      targetPort: http

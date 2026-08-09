@@ -1,0 +1,48 @@
+# Build output
+target/
+dist/
+build/
+*.class
+*.jar
+
+# Node
+node_modules/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.coverage
+
+# Trained model artifacts and experiment tracking — NOT source.
+# Anchored to the repo root on purpose: a bare `models/` also matches the source package
+# analytics/gsih_analytics/models/, which silently kept the entire predictive layer out of
+# the repository.
+/models/
+mlruns/
+*.pkl
+
+# Terraform state — never in the repository
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+
+# Local environment
+.env
+.env.local
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+
+# TypeScript incremental build cache
+*.tsbuildinfo
+
+# Built output of the offline walkthrough — regenerate with:
+#   npx vite build --config vite.demo.config.ts && node demo/package.mjs
+web/demo-dist/

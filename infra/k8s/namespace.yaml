@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gsih
+  labels:
+    app.kubernetes.io/part-of: global-security-intelligence-hub
+---
+# Default-deny: nothing in this namespace talks to anything until a policy allows it.
+# The hub reads security investigation data, so an unstated network path is a finding.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: gsih
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-controller-to-api
+  namespace: gsih
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: gsih-investigations-api
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+        # The analytics pods post scores to the same API.
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: gsih-analytics
+      ports:
+        - port: 8080

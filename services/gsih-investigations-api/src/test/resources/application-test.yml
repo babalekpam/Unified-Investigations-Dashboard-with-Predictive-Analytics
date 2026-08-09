@@ -1,0 +1,21 @@
+# Slice of the serving layer against in-memory H2 so the suite runs with no Docker daemon.
+# Schema comes from the entity mapping here; Flyway owns the real PostgreSQL schema and is
+# verified separately by the migration check in CI.
+spring:
+  datasource:
+    url: jdbc:h2:mem:gsih;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+  flyway:
+    enabled: false
+
+gsih:
+  security:
+    local-signing-key: test-signing-key-test-signing-key-0123456789

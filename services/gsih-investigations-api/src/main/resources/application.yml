@@ -1,0 +1,81 @@
+spring:
+  application:
+    name: gsih-investigations-api
+  # No default profile on purpose. `local` activates LocalTokenController, which mints
+  # arbitrary-role tokens from a hardcoded key at a permitAll path — with `local` as the
+  # default, an image run without SPRING_PROFILES_ACTIVE shipped that endpoint live.
+  # The dangerous profile is now opt-in, and ProfileGuard fails startup if neither
+  # `local` nor `azure` is selected.
+  datasource:
+    url: ${GSIH_DB_URL:jdbc:postgresql://localhost:5432/gsih}
+    username: ${GSIH_DB_USER:gsih}
+    password: ${GSIH_DB_PASSWORD:gsih}
+    hikari:
+      maximum-pool-size: 10
+      pool-name: gsih-serving
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
+server:
+  port: ${PORT:8080}
+  shutdown: graceful
+  error:
+    include-message: never
+    include-stacktrace: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: gsih-investigations-api
+
+gsih:
+  cors:
+    allowed-origins: ${GSIH_ALLOWED_ORIGINS:http://localhost:5173}
+
+logging:
+  level:
+    com.att.gsih: INFO
+
+---
+# Laptop / docker-compose demo. Tokens are signed with a symmetric key instead of Entra ID.
+spring:
+  config:
+    activate:
+      on-profile: local
+
+gsih:
+  security:
+    local-signing-key: ${GSIH_LOCAL_SIGNING_KEY:local-demo-signing-key-change-me-0123456789}
+
+---
+# Deployed environments: Microsoft Entra ID is the token issuer, no local key exists.
+spring:
+  config:
+    activate:
+      on-profile: azure
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${GSIH_ENTRA_ISSUER_URI}
+          audiences: ${GSIH_ENTRA_AUDIENCE}

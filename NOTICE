@@ -1,0 +1,16 @@
+Global Security Intelligence Hub
+Unified Investigations Dashboard with Predictive Analytics
+
+This codebase implements the Global Security Intelligence Hub proposal: the canonical
+investigations data model, the streaming and batch ingestion paths, the serving API, the
+predictive analytics layer, the three role-based dashboards, and the infrastructure
+definitions.
+
+Author: Lekpam Nkawula
+Version: 1.0.0
+August 2026
+
+Licensed under the terms in the accompanying LICENSE file.
+
+Third-party fonts bundled in web/src/assets/fonts are used under the SIL Open Font
+Licence; each licence ships alongside its font files.

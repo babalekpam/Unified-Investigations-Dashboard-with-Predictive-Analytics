@@ -1,0 +1,115 @@
+# Local stand-up of the whole hub: warehouse, streaming, API, analytics and dashboards.
+#
+# This mirrors the deployed topology closely enough to be useful — the same services,
+# the same contracts between them — while replacing the managed Azure pieces with local
+# equivalents: PostgreSQL for Azure Database for PostgreSQL, Kafka for Event Hubs, and
+# the API's `local` profile for Microsoft Entra ID.
+
+name: gsih
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: gsih
+      POSTGRES_USER: gsih
+      POSTGRES_PASSWORD: gsih
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gsih -d gsih"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  kafka:
+    image: bitnami/kafka:3.7
+    environment:
+      # KRaft single node — no ZooKeeper, which is one less thing to explain in a demo.
+      KAFKA_CFG_NODE_ID: "0"
+      KAFKA_CFG_PROCESS_ROLES: controller,broker
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 0@kafka:9093
+      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
+      ALLOW_PLAINTEXT_LISTENER: "yes"
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      GSIH_DB_URL: jdbc:postgresql://postgres:5432/gsih
+      GSIH_DB_USER: gsih
+      GSIH_DB_PASSWORD: gsih
+      GSIH_ALLOWED_ORIGINS: http://localhost:5173,http://localhost:8090
+      GSIH_LOCAL_SIGNING_KEY: local-demo-signing-key-change-me-0123456789
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  ingest:
+    build:
+      context: .
+      dockerfile: infra/docker/ingest.Dockerfile
+    environment:
+      GSIH_DB_URL: jdbc:postgresql://postgres:5432/gsih
+      GSIH_DB_USER: gsih
+      GSIH_DB_PASSWORD: gsih
+      GSIH_KAFKA_BOOTSTRAP: kafka:9092
+      GSIH_BADGE_SALT: local-demo-badge-salt
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      # The API owns the Flyway migrations; ingest must not start against an empty schema.
+      api:
+        condition: service_started
+
+  analytics:
+    build:
+      context: .
+      dockerfile: infra/docker/analytics.Dockerfile
+    environment:
+      GSIH_DB_URL: postgresql+psycopg2://gsih:gsih@postgres:5432/gsih
+      GSIH_API_BASE_URL: http://api:8080
+      GSIH_MLFLOW_TRACKING_URI: file:/models/mlruns
+    ports:
+      - "8000:8000"
+    volumes:
+      - model-store:/models
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: infra/docker/web.Dockerfile
+      args:
+        VITE_API_BASE_URL: http://localhost:8080
+    ports:
+      - "8090:8080"
+    depends_on:
+      - api
+
+volumes:
+  postgres-data:
+  model-store:
